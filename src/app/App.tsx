@@ -11,7 +11,8 @@ import FlowCanvas from '../features/canvas';
 import TiptapEditor from '../features/script-editor';
 import { DEFAULT_SHORTCUTS, SHORTCUT_STORAGE_KEY, ShortcutMap, ShortcutSettingsPanel } from '../features/shortcuts';
 import { normalizeEdgeHandles } from '../features/canvas/utils/normalizeEdgeHandles';
-import { AutoSaveStatus, WorkspaceSaveState, WorkspaceNode, NodeType } from '../types';
+import { DEFAULT_SHOT_THRESHOLD_SECONDS } from '../features/canvas/utils/shotSequence';
+import { AutoSaveStatus, ScriptVariable, WorkspaceSaveState, WorkspaceNode, NodeType } from '../types';
 import { dbGet, dbSet, removeLegacyLocalStorageKeys } from '../shared/storage/db';
 
 const STORAGE_KEY = 'visual_text_flow_state';
@@ -37,6 +38,9 @@ export default function App() {
   const [mainDocHtml, setMainDocHtml] = useState<string>('');
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkspaceNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [variables, setVariables] = useState<ScriptVariable[]>([]);
+  const [shotOrder, setShotOrder] = useState<string[]>([]);
+  const [shotThresholdSeconds, setShotThresholdSeconds] = useState<number>(DEFAULT_SHOT_THRESHOLD_SECONDS);
   
   // Responsive mode select: 'split' | 'editor' | 'canvas' 
   const [activeTab, setActiveTab] = useState<'editor' | 'canvas' | 'split'>('split');
@@ -101,6 +105,7 @@ export default function App() {
         tableCellAlignments: n.data.type === 'table' ? n.data.tableCellAlignments : undefined,
         activeTableCell: n.data.type === 'table' ? n.data.activeTableCell : undefined,
         timelineData: n.data.type === 'timeline' ? n.data.timelineData : undefined,
+        groupData: n.data.type === 'group' ? n.data.groupData : undefined,
         createdAt: n.data.createdAt || Date.now(),
       },
     })) as WorkspaceNode[];
@@ -108,6 +113,9 @@ export default function App() {
     return {
       mainDocumentHtml: mainDocHtml,
       nodes: serializedNodes,
+      variables,
+      shotOrder,
+      shotThresholdSeconds,
       edges: edges.map((e) => ({
         id: e.id,
         source: e.source,
@@ -121,7 +129,7 @@ export default function App() {
         markerEnd: e.markerEnd,
       })),
     };
-  }, [mainDocHtml, nodes, edges]);
+  }, [mainDocHtml, nodes, edges, variables, shotOrder, shotThresholdSeconds]);
 
   const cloneWorkspaceSnapshot = useCallback((snapshot: WorkspaceSaveState): WorkspaceSaveState => {
     return JSON.parse(JSON.stringify(snapshot));
@@ -140,6 +148,9 @@ export default function App() {
     setMainDocHtml(snapshot.mainDocumentHtml || '');
     setNodes(nextNodes);
     setEdges(normalizeEdgeHandles(nextNodes, (snapshot.edges || []) as Edge[]));
+    setVariables(snapshot.variables || []);
+    setShotOrder(snapshot.shotOrder || []);
+    setShotThresholdSeconds(snapshot.shotThresholdSeconds || DEFAULT_SHOT_THRESHOLD_SECONDS);
   }, [setNodes, setEdges]);
 
   // Initialize and load saved state or defaults
@@ -152,6 +163,9 @@ export default function App() {
           setMainDocHtml(parsed.mainDocumentHtml || '');
           setNodes(nextNodes);
           setEdges(normalizeEdgeHandles(nextNodes, (parsed.edges as Edge[]) || []));
+          setVariables(parsed.variables || []);
+          setShotOrder(parsed.shotOrder || []);
+          setShotThresholdSeconds(parsed.shotThresholdSeconds || DEFAULT_SHOT_THRESHOLD_SECONDS);
           removeLegacyLocalStorageKeys();
           setIsLoaded(true);
           return;
@@ -313,6 +327,9 @@ export default function App() {
     setMainDocHtml(state.mainDocumentHtml || '');
     setNodes(nextNodes);
     setEdges(normalizeEdgeHandles(nextNodes, (state.edges || []) as Edge[]));
+    setVariables(state.variables || []);
+    setShotOrder(state.shotOrder || []);
+    setShotThresholdSeconds(state.shotThresholdSeconds || DEFAULT_SHOT_THRESHOLD_SECONDS);
   }, [setNodes, setEdges]);
 
   // Custom text extraction into Canvas TextNode
@@ -429,6 +446,12 @@ export default function App() {
               onExtractedSlicePlaced={() => setPendingExtractedSlice(null)}
               shortcuts={shortcuts}
               onOpenShortcutSettings={() => setIsShortcutPanelOpen(true)}
+              variables={variables}
+              onVariablesChange={setVariables}
+              shotOrder={shotOrder}
+              onShotOrderChange={setShotOrder}
+              shotThresholdSeconds={shotThresholdSeconds}
+              onShotThresholdChange={setShotThresholdSeconds}
             />
           </ReactFlowProvider>
         </div>

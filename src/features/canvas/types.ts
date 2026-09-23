@@ -11,6 +11,7 @@ import type {
   AutoSaveStatus,
   CanvasMediaAsset,
   CanvasNodeData,
+  ScriptVariable,
   WorkspaceNode,
   WorkspaceSaveState,
 } from '../../types';
@@ -56,6 +57,12 @@ export interface FlowCanvasProps {
   onExtractedSlicePlaced: () => void;
   shortcuts: ShortcutMap;
   onOpenShortcutSettings: () => void;
+  variables: ScriptVariable[];
+  onVariablesChange: (variables: ScriptVariable[]) => void;
+  shotOrder: string[];
+  onShotOrderChange: (order: string[]) => void;
+  shotThresholdSeconds: number;
+  onShotThresholdChange: (seconds: number) => void;
 }
 
 export interface ViewportHandlers {

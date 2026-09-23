@@ -5,7 +5,21 @@
 
 import { Node, Edge } from '@xyflow/react';
 
-export type NodeType = 'text' | 'image' | 'idea' | 'table' | 'timeline';
+export type NodeType = 'text' | 'image' | 'idea' | 'table' | 'timeline' | 'group';
+
+export interface GroupDataValue {
+  name: string;
+  color: string;
+  locked: boolean;
+  collapsed: boolean;
+  memberIds: string[];
+}
+
+export interface ScriptVariable {
+  id: string;
+  name: string;
+  value: string;
+}
 
 export interface TableNodeDataValue {
   headers: string[];
@@ -86,12 +100,18 @@ export interface TimelineCanvasNodeData extends BaseCanvasNodeData {
   timelineData?: TimelineTrackDataValue;
 }
 
+export interface GroupCanvasNodeData extends BaseCanvasNodeData {
+  type: 'group';
+  groupData: GroupDataValue;
+}
+
 export type CanvasNodeData =
   | TextCanvasNodeData
   | ImageCanvasNodeData
   | IdeaCanvasNodeData
   | TableCanvasNodeData
-  | TimelineCanvasNodeData;
+  | TimelineCanvasNodeData
+  | GroupCanvasNodeData;
 
 export type WorkspaceNode = Node<CanvasNodeData>;
 
@@ -108,4 +128,7 @@ export interface WorkspaceSaveState {
   mainDocumentHtml: string;
   nodes: Array<WorkspaceNode>;
   edges: Array<Edge>;
+  variables?: ScriptVariable[];
+  shotOrder?: string[];
+  shotThresholdSeconds?: number;
 }

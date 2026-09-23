@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { 
-  BookOpen, Download, HelpCircle, Compass, Image as ImageIcon, MoreHorizontal, Rows3, Trash2, Upload, Keyboard
+  BookOpen, Download, FileDown, FileUp, FileSpreadsheet, HelpCircle, Compass, Image as ImageIcon, MoreHorizontal, Rows3, Trash2, Upload, Keyboard
 } from 'lucide-react';
 import { WorkspaceSaveState } from '../../../types';
 import { useFeedback } from '../../../shared/feedback/FeedbackProvider';
@@ -19,6 +19,9 @@ import {
 interface CanvasHeaderProps {
   onExportState: () => void;
   onImportState: (state: WorkspaceSaveState) => void;
+  onExportMarkdown?: () => void;
+  onExportCsv?: () => void;
+  onImportMarkdownOutline?: (markdown: string) => void;
   leadingActions?: React.ReactNode;
   rightActions?: React.ReactNode;
   menuOpen?: boolean;
@@ -32,6 +35,9 @@ interface CanvasHeaderProps {
 const CanvasHeader = memo(function CanvasHeader({ 
   onExportState, 
   onImportState, 
+  onExportMarkdown,
+  onExportCsv,
+  onImportMarkdownOutline,
   leadingActions,
   rightActions,
   menuOpen,
@@ -46,6 +52,7 @@ const CanvasHeader = memo(function CanvasHeader({
   const [showHelp, setShowHelp] = useState(false);
   const [defaultImageMode, setDefaultImageMode] = useState<ImageNodeDisplayMode>(() => getDefaultImageNodeDisplayMode());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const markdownInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const helpRef = useRef<HTMLDivElement>(null);
 
@@ -98,6 +105,37 @@ const CanvasHeader = memo(function CanvasHeader({
   const handleExportClick = () => {
     setIsMenuOpen(false);
     onExportState();
+  };
+
+  const handleImportMarkdownClick = () => {
+    setIsMenuOpen(false);
+    markdownInputRef.current?.click();
+  };
+
+  const handleMarkdownFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = String(event.target?.result || '');
+      if (text.trim()) {
+        onImportMarkdownOutline?.(text);
+      } else {
+        toast('Markdown 文件为空。', 'error');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleExportMarkdownClick = () => {
+    setIsMenuOpen(false);
+    onExportMarkdown?.();
+  };
+
+  const handleExportCsvClick = () => {
+    setIsMenuOpen(false);
+    onExportCsv?.();
   };
 
   const handleHelpClick = () => {
@@ -187,6 +225,30 @@ const CanvasHeader = memo(function CanvasHeader({
               >
                 <Download className="w-3.5 h-3.5 text-neutral-400" />
                 <span>导出数据</span>
+              </button>
+
+              <div className="h-px bg-neutral-100 my-1.5" />
+
+              <button
+                onClick={handleImportMarkdownClick}
+                className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors text-left cursor-pointer font-medium"
+              >
+                <FileUp className="w-3.5 h-3.5 text-neutral-400" />
+                <span>导入 Markdown 大纲</span>
+              </button>
+              <button
+                onClick={handleExportMarkdownClick}
+                className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors text-left cursor-pointer font-medium"
+              >
+                <FileDown className="w-3.5 h-3.5 text-neutral-400" />
+                <span>导出 Markdown 大纲</span>
+              </button>
+              <button
+                onClick={handleExportCsvClick}
+                className="w-full px-3 py-1.5 text-xs text-neutral-700 hover:bg-neutral-50 flex items-center gap-2 transition-colors text-left cursor-pointer font-medium"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-neutral-400" />
+                <span>导出 CSV 分镜表</span>
               </button>
 
               <div className="h-px bg-neutral-100 my-1.5" />
@@ -282,6 +344,13 @@ const CanvasHeader = memo(function CanvasHeader({
         onChange={handleFileImportChange} 
         accept=".json" 
         className="hidden" 
+      />
+      <input
+        type="file"
+        ref={markdownInputRef}
+        onChange={handleMarkdownFileChange}
+        accept=".md,.markdown,.txt"
+        className="hidden"
       />
 
       {/* Guidelines Modal Popover overlay */}

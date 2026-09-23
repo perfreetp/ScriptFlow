@@ -9,6 +9,7 @@ import { useCanvasAssembly } from './hooks/useCanvasAssembly';
 import { useCanvasClipboard } from './hooks/useCanvasClipboard';
 import { useCanvasContextMenu } from './hooks/useCanvasContextMenu';
 import { useCanvasEdgeCommands } from './hooks/useCanvasEdgeCommands';
+import { useCanvasGroups } from './hooks/useCanvasGroups';
 import { useCanvasMediaLibrary } from './hooks/useCanvasMediaLibrary';
 import { useCanvasNodeCommands } from './hooks/useCanvasNodeCommands';
 import { useCanvasPointerPan } from './hooks/useCanvasPointerPan';
@@ -16,6 +17,18 @@ import { useCanvasPresentation } from './hooks/useCanvasPresentation';
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts';
 import { useCanvasTemplates } from './hooks/useCanvasTemplates';
 import { createImageNodeFromAsset, createMediaAsset } from './utils/mediaAssetUtils';
+import { computeGroupBounds } from './utils/groupUtils';
+import {
+  downloadTextFile,
+  exportCanvasToCsv,
+  exportCanvasToMarkdown,
+  isOutlineEmpty,
+  parseMarkdownOutline,
+} from './utils/markdownOutline';
+import { applyVariablesToNodes, collectUnresolvedVariables } from './utils/variables';
+import type { UnresolvedVariableRef } from './utils/variables';
+import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import type { GroupCanvasNodeData, TextCanvasNodeData, WorkspaceNode } from '../../types';
 import type { FlowCanvasProps, ViewportHandlers, ViewportShellHandlers } from './types';
 
 export default function FlowCanvas({
@@ -39,14 +52,24 @@ export default function FlowCanvas({
   onExtractedSlicePlaced,
   shortcuts,
   onOpenShortcutSettings,
+  variables,
+  onVariablesChange,
+  shotOrder,
+  onShotOrderChange,
+  shotThresholdSeconds,
+  onShotThresholdChange,
 }: FlowCanvasProps) {
   const { screenToFlowPosition, fitView, zoomIn, zoomOut } = useReactFlow();
+  const { toast } = useFeedback();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showHints, setShowHints] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [isTemplatePanelOpen, setIsTemplatePanelOpen] = useState(false);
+  const [isShotPanelOpen, setIsShotPanelOpen] = useState(false);
+  const [isVariablesPanelOpen, setIsVariablesPanelOpen] = useState(false);
+  const [exportBlock, setExportBlock] = useState<{ unresolved: UnresolvedVariableRef[]; exportLabel: string } | null>(null);
   const [timelineFocusDisabledIds, setTimelineFocusDisabledIds] = useState<Set<string>>(() => new Set());
 
   const pointerPan = useCanvasPointerPan();
@@ -89,7 +112,16 @@ export default function FlowCanvas({
     contextMenu.closeContextMenu();
   }, [contextMenu]);
 
+  const groupCommands = useCanvasGroups({
+    nodes,
+    setNodes,
+    setEdges,
+    onNodesChange,
+    onAfterSelectionMutation: closeTransientUi,
+  });
+
   const nodeCommands = useCanvasNodeCommands({
+    nodes,
     selectedNodes: presentation.selectedNodes,
     setNodes,
     setEdges,
@@ -149,6 +181,126 @@ export default function FlowCanvas({
       reader.readAsDataURL(file);
     });
   }, [screenToFlowPosition, setNodes]);
+
+  const guardExportAgainstUnresolved = useCallback((exportLabel: string) => {
+    const unresolved = collectUnresolvedVariables(nodes);
+    if (unresolved.length > 0) {
+      setExportBlock({ unresolved, exportLabel });
+      return false;
+    }
+    return true;
+  }, [nodes]);
+
+  const handleExportMarkdown = useCallback(() => {
+    if (!guardExportAgainstUnresolved('导出 Markdown')) return;
+    downloadTextFile(
+      `scriptflow-storyboard-${Date.now()}.md`,
+      exportCanvasToMarkdown(nodes),
+      'text/markdown;charset=utf-8',
+    );
+    toast('已导出带层级的 Markdown 大纲。', 'success');
+  }, [guardExportAgainstUnresolved, nodes, toast]);
+
+  const handleExportCsv = useCallback(() => {
+    if (!guardExportAgainstUnresolved('导出 CSV 分镜表')) return;
+    downloadTextFile(
+      `scriptflow-shots-${Date.now()}.csv`,
+      exportCanvasToCsv(nodes, edges, shotOrder),
+      'text/csv;charset=utf-8',
+    );
+    toast('已导出 CSV 分镜表。', 'success');
+  }, [edges, guardExportAgainstUnresolved, nodes, shotOrder, toast]);
+
+  const handleImportMarkdownOutline = useCallback((markdown: string) => {
+    const outline = parseMarkdownOutline(markdown);
+    if (isOutlineEmpty(outline)) {
+      toast('未在 Markdown 中识别到列表项，无法生成画布。', 'error');
+      return;
+    }
+
+    const base = getCenteredNodePosition(0, 0);
+    const CARD_WIDTH = 280;
+    const CARD_HEIGHT = 150;
+    const GAP_X = 24;
+    const GAP_Y = 24;
+    const COLUMNS = 3;
+    const GROUP_GAP = 80;
+
+    const newNodes: WorkspaceNode[] = [];
+    let cursorY = base.y;
+    let groupIndex = 0;
+
+    const appendGroup = (title: string | null, items: { title: string; content: string }[]) => {
+      if (items.length === 0) return;
+      const members: WorkspaceNode[] = items.map((item, index) => {
+        const id = `node-${Date.now()}-${groupIndex}-${index}-${Math.random().toString(36).slice(2, 5)}`;
+        return {
+          id,
+          type: 'text',
+          position: {
+            x: base.x + (index % COLUMNS) * (CARD_WIDTH + GAP_X),
+            y: cursorY + Math.floor(index / COLUMNS) * (CARD_HEIGHT + GAP_Y),
+          },
+          data: {
+            id,
+            type: 'text',
+            title: item.title,
+            content: item.content,
+            width: CARD_WIDTH,
+            height: CARD_HEIGHT,
+            createdAt: Date.now(),
+          } as TextCanvasNodeData,
+        } as WorkspaceNode;
+      });
+      newNodes.push(...members);
+
+      if (title) {
+        const bounds = computeGroupBounds(members);
+        const groupId = `group-${Date.now()}-${groupIndex}-${Math.random().toString(36).slice(2, 5)}`;
+        newNodes.unshift({
+          id: groupId,
+          type: 'group',
+          position: { x: bounds.x, y: bounds.y },
+          style: { width: bounds.width, height: bounds.height, zIndex: -1 },
+          data: {
+            id: groupId,
+            type: 'group',
+            content: '',
+            width: bounds.width,
+            height: bounds.height,
+            createdAt: Date.now(),
+            groupData: {
+              name: title,
+              color: '#dbeafe',
+              locked: false,
+              collapsed: false,
+              memberIds: members.map((member) => member.id),
+            },
+          } as GroupCanvasNodeData,
+        } as WorkspaceNode);
+      }
+
+      const rows = Math.ceil(items.length / COLUMNS);
+      cursorY += rows * (CARD_HEIGHT + GAP_Y) + GROUP_GAP;
+      groupIndex += 1;
+    };
+
+    outline.groups.forEach((group) => appendGroup(group.title, group.items));
+    appendGroup(null, outline.looseItems);
+
+    setNodes((currentNodes) => [...currentNodes, ...newNodes]);
+    toast(`已从 Markdown 大纲生成 ${newNodes.length} 个画布元素。`, 'success');
+  }, [getCenteredNodePosition, setNodes, toast]);
+
+  const handleApplyVariables = useCallback((onlyNames?: Set<string>) => {
+    const { nodes: nextNodes, replacedCount } = applyVariablesToNodes(nodes, variables, onlyNames);
+    if (replacedCount === 0) {
+      toast('没有可替换的占位符，请先为变量填写值。');
+      return;
+    }
+    setNodes(nextNodes);
+    toast(`已在 ${replacedCount} 个节点中完成变量替换。`, 'success');
+  }, [nodes, setNodes, toast, variables]);
 
   useCanvasShortcuts({
     shortcuts,
@@ -265,6 +417,8 @@ export default function FlowCanvas({
     onUpdateContent: nodeCommands.updateContent,
     onAddCustomHandle: nodeCommands.addCustomHandle,
     onDeleteCustomHandle: nodeCommands.deleteCustomHandle,
+    onUpdateGroup: groupCommands.updateGroup,
+    onUngroup: groupCommands.ungroup,
     onExitTimelineFocus: exitTimelineFocus,
     timelineFocusDisabledIds,
     editingId,
@@ -274,6 +428,8 @@ export default function FlowCanvas({
   }), [
     editingId,
     exitTimelineFocus,
+    groupCommands.ungroup,
+    groupCommands.updateGroup,
     nodeCommands.addCustomHandle,
     nodeCommands.deleteCustomHandle,
     nodeCommands.deleteNode,
@@ -409,7 +565,7 @@ export default function FlowCanvas({
           <CanvasViewport
             nodes={presentation.displayNodes}
             edges={presentation.displayEdges}
-            onNodesChange={onNodesChange}
+            onNodesChange={groupCommands.handleNodesChange}
             onEdgesChange={onEdgesChange}
             nodeTypes={CANVAS_NODE_TYPES}
             viewportHandlers={viewportHandlers}
@@ -421,6 +577,9 @@ export default function FlowCanvas({
           header={{
             onExportState,
             onImportState,
+            onExportMarkdown: handleExportMarkdown,
+            onExportCsv: handleExportCsv,
+            onImportMarkdownOutline: handleImportMarkdownOutline,
             canUndo,
             canRedo,
             onUndo,
@@ -455,6 +614,7 @@ export default function FlowCanvas({
             state: contextMenu.contextMenu,
             selectedCount: presentation.selectedNodes.length,
             canPaste: !!clipboard.clipboard,
+            onCreateGroup: () => groupCommands.createGroupFromSelection(presentation.selectedNodes),
             onCopy: clipboard.copySelectedNodes,
             onPaste: () => clipboard.pasteNodes(),
             onDelete: nodeCommands.deleteSelectedNodes,
@@ -466,6 +626,8 @@ export default function FlowCanvas({
           }}
           toolbar={{
             isDrawerOpen,
+            isShotPanelOpen,
+            isVariablesPanelOpen,
             mediaAssetCount: mediaLibrary.assets.length,
             saveStatus,
             lastSavedAt,
@@ -495,7 +657,42 @@ export default function FlowCanvas({
               mediaLibrary.setOpen(false);
               edgeCommands.setSelectedEdge(null);
             },
+            onToggleShotPanel: () => {
+              setIsShotPanelOpen((open) => !open);
+              setIsVariablesPanelOpen(false);
+            },
+            onToggleVariablesPanel: () => {
+              setIsVariablesPanelOpen((open) => !open);
+              setIsShotPanelOpen(false);
+            },
             onAddNode: nodeCommands.addNode,
+          }}
+          shotPanel={{
+            isOpen: isShotPanelOpen,
+            nodes,
+            edges,
+            shotOrder,
+            thresholdSeconds: shotThresholdSeconds,
+            onShotOrderChange,
+            onThresholdChange: onShotThresholdChange,
+            onClose: () => setIsShotPanelOpen(false),
+          }}
+          variablesPanel={{
+            isOpen: isVariablesPanelOpen,
+            nodes,
+            variables,
+            onVariablesChange,
+            onApplyVariables: handleApplyVariables,
+            onClose: () => setIsVariablesPanelOpen(false),
+          }}
+          exportBlock={{
+            state: exportBlock,
+            onClose: () => setExportBlock(null),
+            onOpenVariables: () => {
+              setExportBlock(null);
+              setIsVariablesPanelOpen(true);
+              setIsShotPanelOpen(false);
+            },
           }}
           mediaLibrary={mediaLibrary}
           templates={{

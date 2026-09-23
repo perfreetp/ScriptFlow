@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { Edge } from '@xyflow/react';
 import type { WorkspaceNode } from '../../../types';
+import { collapseGroupsPresentation } from '../utils/groupUtils';
 import { getActiveTickDetails, getConnectedNodeIds } from '../utils/presentationUtils';
 
 export function useCanvasPresentation(
@@ -8,13 +9,20 @@ export function useCanvasPresentation(
   edges: Edge[],
   timelineFocusDisabledIds: Set<string>,
 ) {
+  const grouped = useMemo(
+    () => collapseGroupsPresentation(nodes, edges),
+    [nodes, edges],
+  );
+  const visibleNodes = grouped.nodes;
+  const visibleEdges = grouped.edges;
+
   const activeTimelineNode = useMemo(
-    () => nodes.find((node) => (
+    () => visibleNodes.find((node) => (
       node.type === 'timeline'
       && node.selected
       && !timelineFocusDisabledIds.has(node.id)
     )),
-    [nodes, timelineFocusDisabledIds],
+    [visibleNodes, timelineFocusDisabledIds],
   );
 
   const selectedNodes = useMemo(() => nodes.filter((node) => node.selected), [nodes]);
@@ -26,20 +34,20 @@ export function useCanvasPresentation(
   );
 
   const activeTickDetails = useMemo(
-    () => getActiveTickDetails(nodes, timelineFocusDisabledIds),
-    [nodes, timelineFocusDisabledIds],
+    () => getActiveTickDetails(visibleNodes, timelineFocusDisabledIds),
+    [visibleNodes, timelineFocusDisabledIds],
   );
   const isFilterActive = !!(activeTimelineNode || activeTickDetails);
 
   const connectedNodeIds = useMemo(
-    () => getConnectedNodeIds(nodes, edges, activeTimelineNode, activeTickDetails),
-    [nodes, edges, activeTimelineNode, activeTickDetails],
+    () => getConnectedNodeIds(visibleNodes, visibleEdges, activeTimelineNode, activeTickDetails),
+    [visibleNodes, visibleEdges, activeTimelineNode, activeTickDetails],
   );
 
   const displayNodes = useMemo(() => {
-    if (!isFilterActive) return nodes;
+    if (!isFilterActive) return visibleNodes;
 
-    return nodes.map((node) => {
+    return visibleNodes.map((node) => {
       const isConnected = connectedNodeIds.has(node.id);
       return {
         ...node,
@@ -51,12 +59,12 @@ export function useCanvasPresentation(
         },
       };
     });
-  }, [nodes, isFilterActive, connectedNodeIds]);
+  }, [visibleNodes, isFilterActive, connectedNodeIds]);
 
   const displayEdges = useMemo(() => {
-    if (!isFilterActive) return edges;
+    if (!isFilterActive) return visibleEdges;
 
-    return edges.map((edge) => {
+    return visibleEdges.map((edge) => {
       const isSourceConnected = connectedNodeIds.has(edge.source);
       const isTargetConnected = connectedNodeIds.has(edge.target);
       const isActiveTickEdge = !!activeTickDetails
@@ -90,7 +98,7 @@ export function useCanvasPresentation(
         },
       };
     });
-  }, [edges, isFilterActive, activeTickDetails, connectedNodeIds]);
+  }, [visibleEdges, isFilterActive, activeTickDetails, connectedNodeIds]);
 
   return {
     activeTimelineNode,

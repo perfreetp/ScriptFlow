@@ -4,9 +4,11 @@ import type { Edge } from '@xyflow/react';
 import type { CanvasNodeData, TimelineTrackDataValue, WorkspaceNode } from '../../../types';
 import type { PendingExtractedSlice } from '../types';
 import { createCanvasNode, createExtractedTextNode } from '../utils/createCanvasNode';
+import { getGroupData, getGroupNodes } from '../utils/groupUtils';
 import { layoutCanvasNodes } from '../utils/layoutCanvasNodes';
 
 interface UseCanvasNodeCommandsOptions {
+  nodes: WorkspaceNode[];
   selectedNodes: WorkspaceNode[];
   setNodes: Dispatch<SetStateAction<WorkspaceNode[]>>;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
@@ -35,6 +37,7 @@ function isEdgeUsingInvalidTimelineTick(edge: Edge, nodeId: string, validTickIds
 }
 
 export function useCanvasNodeCommands({
+  nodes,
   selectedNodes,
   setNodes,
   setEdges,
@@ -113,7 +116,18 @@ export function useCanvasNodeCommands({
   }, [setEdges, setNodes]);
 
   const deleteSelectedNodes = useCallback(() => {
-    const selectedIds = new Set(selectedNodes.map((node) => node.id));
+    const lockedMemberIds = new Set<string>();
+    getGroupNodes(nodes)
+      .filter((node) => getGroupData(node)?.locked)
+      .forEach((node) => {
+        lockedMemberIds.add(node.id);
+        (getGroupData(node)?.memberIds || []).forEach((memberId) => lockedMemberIds.add(memberId));
+      });
+    const selectedIds = new Set(
+      selectedNodes
+        .filter((node) => !lockedMemberIds.has(node.id))
+        .map((node) => node.id),
+    );
     if (selectedIds.size === 0) return;
 
     setNodes((currentNodes) => currentNodes.filter((node) => !selectedIds.has(node.id)));
@@ -121,7 +135,7 @@ export function useCanvasNodeCommands({
       currentEdges.filter((edge) => !selectedIds.has(edge.source) && !selectedIds.has(edge.target)),
     );
     onAfterSelectionMutation?.();
-  }, [onAfterSelectionMutation, selectedNodes, setEdges, setNodes]);
+  }, [nodes, onAfterSelectionMutation, selectedNodes, setEdges, setNodes]);
 
   const updateNodesFromPanel = useCallback((nodeIds: string[], patch: Partial<CanvasNodeData>) => {
     const nodeIdSet = new Set(nodeIds);

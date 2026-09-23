@@ -1,5 +1,7 @@
 import {
   Boxes,
+  Braces,
+  Clapperboard,
   Eraser,
   Film,
   FolderOpen,
@@ -21,6 +23,8 @@ import type { ShortcutMap } from '../../shortcuts';
 
 interface CanvasToolbarProps {
   isDrawerOpen: boolean;
+  isShotPanelOpen: boolean;
+  isVariablesPanelOpen: boolean;
   isMediaLibraryOpen: boolean;
   mediaAssetCount: number;
   saveStatus: AutoSaveStatus;
@@ -30,11 +34,15 @@ interface CanvasToolbarProps {
   onToggleMediaLibrary: () => void;
   onToggleDrawer: () => void;
   onOpenTemplates: () => void;
+  onToggleShotPanel: () => void;
+  onToggleVariablesPanel: () => void;
   onAddNode: (type: NodeType) => void;
 }
 
 export default function CanvasToolbar({
   isDrawerOpen,
+  isShotPanelOpen,
+  isVariablesPanelOpen,
   isMediaLibraryOpen,
   mediaAssetCount,
   saveStatus,
@@ -44,6 +52,8 @@ export default function CanvasToolbar({
   onToggleMediaLibrary,
   onToggleDrawer,
   onOpenTemplates,
+  onToggleShotPanel,
+  onToggleVariablesPanel,
   onAddNode,
 }: CanvasToolbarProps) {
   return (
@@ -70,6 +80,15 @@ export default function CanvasToolbar({
           </ToolbarIconButton>
           <ToolbarIconButton title="轨道" shortcut={shortcuts['canvas.addTimeline']} onClick={() => onAddNode('timeline')}>
             <Film className="h-4 w-4" />
+          </ToolbarIconButton>
+
+          <div className="mx-1 h-5 w-px bg-neutral-200" />
+
+          <ToolbarIconButton title="分镜时间轴" onClick={onToggleShotPanel} active={isShotPanelOpen}>
+            <Clapperboard className="h-4 w-4" />
+          </ToolbarIconButton>
+          <ToolbarIconButton title="变量管理" onClick={onToggleVariablesPanel} active={isVariablesPanelOpen}>
+            <Braces className="h-4 w-4" />
           </ToolbarIconButton>
 
           <div className="mx-1 h-5 w-px bg-neutral-200" />

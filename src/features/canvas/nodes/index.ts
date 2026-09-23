@@ -7,3 +7,4 @@ export { IdeaNode } from './IdeaNode';
 export { TableNode } from './TableNode';
 export { TimelineNode } from './TimelineNode';
 export type { TimelineTick, TimelineTrackDataState } from './TimelineNode';
+export { GroupNode } from './GroupNode';

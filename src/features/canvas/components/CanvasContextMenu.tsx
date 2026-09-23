@@ -1,4 +1,4 @@
-import { AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Copy, PanelTop, Trash2 } from 'lucide-react';
+import { AlignHorizontalDistributeCenter, AlignVerticalDistributeCenter, Copy, Group, PanelTop, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 interface CanvasContextMenuProps {
@@ -6,6 +6,7 @@ interface CanvasContextMenuProps {
   y: number;
   selectedCount: number;
   canPaste: boolean;
+  onCreateGroup: () => void;
   onCopy: () => void;
   onPaste: () => void;
   onDelete: () => void;
@@ -21,6 +22,7 @@ export default function CanvasContextMenu({
   y,
   selectedCount,
   canPaste,
+  onCreateGroup,
   onCopy,
   onPaste,
   onDelete,
@@ -44,6 +46,9 @@ export default function CanvasContextMenu({
       <MenuButton icon={<Copy className="h-4 w-4" />} label="复制" shortcut="Ctrl + C" onClick={onCopy} disabled={!hasSelection} />
       <MenuButton icon={<Copy className="h-4 w-4" />} label="粘贴到此处" shortcut="Ctrl + V" onClick={onPaste} disabled={!canPaste} />
       <MenuButton icon={<Trash2 className="h-4 w-4" />} label="删除" shortcut="Del" onClick={onDelete} disabled={!hasSelection} danger />
+
+      <div className="my-2 h-px bg-neutral-100" />
+      <MenuButton icon={<Group className="h-4 w-4" />} label="创建分组" onClick={onCreateGroup} disabled={!hasSelection} />
 
       <div className="my-2 h-px bg-neutral-100" />
       <MenuButton icon={<PanelTop className="h-4 w-4" />} label="左对齐" onClick={onAlignLeft} disabled={!canAlign} />

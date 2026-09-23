@@ -10,7 +10,11 @@ import MediaLibraryDrawer from './components/MediaLibraryDrawer';
 import CanvasTemplatePanel from './components/CanvasTemplatePanel';
 import AssemblyPreviewModal from './components/AssemblyPreviewModal';
 import ClearCanvasConfirmModal from './components/ClearCanvasConfirmModal';
-import type { AutoSaveStatus, CanvasNodeData, WorkspaceNode, WorkspaceSaveState } from '../../types';
+import ShotTimelinePanel from './components/ShotTimelinePanel';
+import VariablesPanel from './components/VariablesPanel';
+import UnresolvedVariablesModal from './components/UnresolvedVariablesModal';
+import type { UnresolvedVariableRef } from './utils/variables';
+import type { AutoSaveStatus, CanvasNodeData, ScriptVariable, WorkspaceNode, WorkspaceSaveState } from '../../types';
 import type { ShortcutMap } from '../shortcuts';
 import type {
   CanvasAssemblyState,
@@ -23,6 +27,9 @@ interface CanvasOverlaysProps {
   header: {
     onExportState: () => void;
     onImportState: (state: WorkspaceSaveState) => void;
+    onExportMarkdown: () => void;
+    onExportCsv: () => void;
+    onImportMarkdownOutline: (markdown: string) => void;
     canUndo: boolean;
     canRedo: boolean;
     onUndo: () => void;
@@ -50,6 +57,7 @@ interface CanvasOverlaysProps {
     state: CanvasContextMenuState | null;
     selectedCount: number;
     canPaste: boolean;
+    onCreateGroup: () => void;
     onCopy: () => void;
     onPaste: () => void;
     onDelete: () => void;
@@ -61,6 +69,8 @@ interface CanvasOverlaysProps {
   };
   toolbar: {
     isDrawerOpen: boolean;
+    isShotPanelOpen: boolean;
+    isVariablesPanelOpen: boolean;
     mediaAssetCount: number;
     saveStatus: AutoSaveStatus;
     lastSavedAt: number | null;
@@ -70,7 +80,32 @@ interface CanvasOverlaysProps {
     onToggleMediaLibrary: () => void;
     onToggleDrawer: () => void;
     onOpenTemplates: () => void;
+    onToggleShotPanel: () => void;
+    onToggleVariablesPanel: () => void;
     onAddNode: (type: CanvasNodeData['type']) => void;
+  };
+  shotPanel: {
+    isOpen: boolean;
+    nodes: WorkspaceNode[];
+    edges: Edge[];
+    shotOrder: string[];
+    thresholdSeconds: number;
+    onShotOrderChange: (order: string[]) => void;
+    onThresholdChange: (seconds: number) => void;
+    onClose: () => void;
+  };
+  variablesPanel: {
+    isOpen: boolean;
+    nodes: WorkspaceNode[];
+    variables: ScriptVariable[];
+    onVariablesChange: (variables: ScriptVariable[]) => void;
+    onApplyVariables: (onlyNames?: Set<string>) => void;
+    onClose: () => void;
+  };
+  exportBlock: {
+    state: { unresolved: UnresolvedVariableRef[]; exportLabel: string } | null;
+    onClose: () => void;
+    onOpenVariables: () => void;
   };
   mediaLibrary: CanvasMediaLibraryState;
   templates: CanvasTemplateState;
@@ -89,6 +124,9 @@ export default function CanvasOverlays({
   properties,
   contextMenu,
   toolbar,
+  shotPanel,
+  variablesPanel,
+  exportBlock,
   mediaLibrary,
   templates,
   assembly,
@@ -99,6 +137,9 @@ export default function CanvasOverlays({
       <CanvasHeader
         onExportState={header.onExportState}
         onImportState={header.onImportState}
+        onExportMarkdown={header.onExportMarkdown}
+        onExportCsv={header.onExportCsv}
+        onImportMarkdownOutline={header.onImportMarkdownOutline}
         menuOpen={header.menuOpen}
         onMenuOpenChange={header.onMenuOpenChange}
         leadingActions={(
@@ -145,6 +186,7 @@ export default function CanvasOverlays({
           y={contextMenu.state.y}
           selectedCount={contextMenu.selectedCount}
           canPaste={contextMenu.canPaste}
+          onCreateGroup={contextMenu.onCreateGroup}
           onCopy={contextMenu.onCopy}
           onPaste={contextMenu.onPaste}
           onDelete={contextMenu.onDelete}
@@ -158,6 +200,8 @@ export default function CanvasOverlays({
 
       <CanvasToolbar
         isDrawerOpen={toolbar.isDrawerOpen}
+        isShotPanelOpen={toolbar.isShotPanelOpen}
+        isVariablesPanelOpen={toolbar.isVariablesPanelOpen}
         isMediaLibraryOpen={toolbar.mediaLibraryOpen}
         mediaAssetCount={toolbar.mediaAssetCount}
         saveStatus={toolbar.saveStatus}
@@ -167,7 +211,37 @@ export default function CanvasOverlays({
         onToggleMediaLibrary={toolbar.onToggleMediaLibrary}
         onToggleDrawer={toolbar.onToggleDrawer}
         onOpenTemplates={toolbar.onOpenTemplates}
+        onToggleShotPanel={toolbar.onToggleShotPanel}
+        onToggleVariablesPanel={toolbar.onToggleVariablesPanel}
         onAddNode={toolbar.onAddNode}
+      />
+
+      <ShotTimelinePanel
+        open={shotPanel.isOpen}
+        nodes={shotPanel.nodes}
+        edges={shotPanel.edges}
+        shotOrder={shotPanel.shotOrder}
+        thresholdSeconds={shotPanel.thresholdSeconds}
+        onShotOrderChange={shotPanel.onShotOrderChange}
+        onThresholdChange={shotPanel.onThresholdChange}
+        onClose={shotPanel.onClose}
+      />
+
+      <VariablesPanel
+        open={variablesPanel.isOpen}
+        nodes={variablesPanel.nodes}
+        variables={variablesPanel.variables}
+        onVariablesChange={variablesPanel.onVariablesChange}
+        onApplyVariables={variablesPanel.onApplyVariables}
+        onClose={variablesPanel.onClose}
+      />
+
+      <UnresolvedVariablesModal
+        open={!!exportBlock.state}
+        unresolved={exportBlock.state?.unresolved || []}
+        exportLabel={exportBlock.state?.exportLabel || ''}
+        onClose={exportBlock.onClose}
+        onOpenVariables={exportBlock.onOpenVariables}
       />
 
       <MediaLibraryDrawer

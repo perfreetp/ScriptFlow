@@ -1,5 +1,5 @@
 import { createContext } from 'react';
-import type { CanvasNodeData, CanvasNodeHandleData } from '../../../types';
+import type { CanvasNodeData, CanvasNodeHandleData, GroupDataValue } from '../../../types';
 import type { ShortcutMap } from '../../shortcuts';
 
 export interface NodeActionContextProps {
@@ -20,6 +20,8 @@ export interface NodeActionContextProps {
   setEditingId?: (id: string | null) => void;
   selectedNodeCount?: number;
   shortcuts?: ShortcutMap;
+  onUpdateGroup?: (groupId: string, patch: Partial<GroupDataValue>) => void;
+  onUngroup?: (groupId: string) => void;
 }
 
 export const NodeActionContext = createContext<NodeActionContextProps>({});
