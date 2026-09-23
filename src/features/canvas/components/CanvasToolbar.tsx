@@ -1,5 +1,6 @@
 import {
   Boxes,
+  Clapperboard,
   Eraser,
   Film,
   FolderOpen,
@@ -27,7 +28,9 @@ interface CanvasToolbarProps {
   lastSavedAt: number | null;
   saveError: string | null;
   shortcuts: ShortcutMap;
+  productionPanelOpen: boolean;
   onToggleMediaLibrary: () => void;
+  onToggleProductionPanel: () => void;
   onToggleDrawer: () => void;
   onOpenTemplates: () => void;
   onAddNode: (type: NodeType) => void;
@@ -41,7 +44,9 @@ export default function CanvasToolbar({
   lastSavedAt,
   saveError,
   shortcuts,
+  productionPanelOpen,
   onToggleMediaLibrary,
+  onToggleProductionPanel,
   onToggleDrawer,
   onOpenTemplates,
   onAddNode,
@@ -87,6 +92,12 @@ export default function CanvasToolbar({
 
           <ToolbarIconButton title="更多工具" shortcut={shortcuts['canvas.toggleMoreTools']} onClick={onToggleDrawer} active={isDrawerOpen}>
             <MoreHorizontal className="h-4 w-4" />
+          </ToolbarIconButton>
+
+          <div className="mx-1 h-5 w-px bg-neutral-200" />
+
+          <ToolbarIconButton title="拍摄制作" onClick={onToggleProductionPanel} active={productionPanelOpen}>
+            <Clapperboard className="h-4 w-4" />
           </ToolbarIconButton>
         </div>
 

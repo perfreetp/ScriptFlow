@@ -4,6 +4,8 @@ import { useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { TableCellSelection, TableNodeDataValue, TableTextAlign, WorkspaceNode } from '../../../types';
 import ColorSwatches from './color/ColorSwatches';
+import ShotSlotsEditor from '../../production/components/ShotSlotsEditor';
+import type { ProductionMaterial } from '../../production/types';
 
 interface CanvasPropertiesPanelProps {
   selectedNodes: WorkspaceNode[];
@@ -12,6 +14,9 @@ interface CanvasPropertiesPanelProps {
   onResizeNodes: (nodeIds: string[], width?: number, height?: number) => void;
   onUpdateEdge: (edgeId: string, patch: Partial<Edge>) => void;
   onSaveSelectionAsTemplate?: () => void;
+  productionMaterials?: ProductionMaterial[];
+  onOpenTeleprompter?: (nodeId: string) => void;
+  shifted?: boolean;
 }
 
 const STATUS_OPTIONS = ['', '草稿', '待补充', '已确认', '重点', '废弃'];
@@ -43,11 +48,14 @@ export default function CanvasPropertiesPanel({
   onResizeNodes,
   onUpdateEdge,
   onSaveSelectionAsTemplate,
+  productionMaterials = [],
+  onOpenTeleprompter,
+  shifted = false,
 }: CanvasPropertiesPanelProps) {
   if (selectedNodes.length === 0 && !selectedEdge) return null;
 
   if (selectedEdge) {
-    return <EdgePropertiesPanel selectedEdge={selectedEdge} onUpdateEdge={onUpdateEdge} />;
+    return <EdgePropertiesPanel selectedEdge={selectedEdge} onUpdateEdge={onUpdateEdge} shifted={shifted} />;
   }
 
   const nodeIds = selectedNodes.map((node) => node.id);
@@ -62,6 +70,7 @@ export default function CanvasPropertiesPanel({
       title={isSingle ? '节点属性' : '批量节点属性'}
       subtitle={isSingle ? firstNode.data.title || firstNode.id : `已选择 ${selectedNodes.length} 个节点`}
       icon={isSingle ? <MousePointer2 className="h-4 w-4" /> : <SquareDashedMousePointer className="h-4 w-4" />}
+      shifted={shifted}
     >
       <CommonNodeFields
         isSingle={isSingle}
@@ -83,6 +92,17 @@ export default function CanvasPropertiesPanel({
       {isSingle && firstNode.type !== 'timeline' && (
         <SpecificFieldsShell key={firstNode.type || firstNode.data.type}>
           <NodeSpecificFields node={firstNode} nodeIds={nodeIds} onUpdateNodes={onUpdateNodes} />
+        </SpecificFieldsShell>
+      )}
+
+      {isSingle && onOpenTeleprompter && (
+        <SpecificFieldsShell key={`shot-${firstNode.id}`}>
+          <ShotSlotsEditor
+            node={firstNode}
+            materials={productionMaterials}
+            onUpdateNodes={onUpdateNodes}
+            onOpenTeleprompter={onOpenTeleprompter}
+          />
         </SpecificFieldsShell>
       )}
     </PanelShell>
@@ -115,9 +135,11 @@ function BatchTemplateAction({
 function EdgePropertiesPanel({
   selectedEdge,
   onUpdateEdge,
+  shifted = false,
 }: {
   selectedEdge: Edge;
   onUpdateEdge: (edgeId: string, patch: Partial<Edge>) => void;
+  shifted?: boolean;
 }) {
   const edgeColor = typeof selectedEdge.style?.stroke === 'string' ? selectedEdge.style.stroke : '#737373';
   const isDashed = selectedEdge.animated === true
@@ -125,7 +147,7 @@ function EdgePropertiesPanel({
   const edgeRouteType = selectedEdge.type === 'step' ? 'step' : 'default';
 
   return (
-    <PanelShell title="连线属性" subtitle="编辑当前关系线" icon={<Link2 className="h-4 w-4" />}>
+    <PanelShell title="连线属性" subtitle="编辑当前关系线" icon={<Link2 className="h-4 w-4" />} shifted={shifted}>
       <Field label="关系名称">
         <input
           value={String(selectedEdge.label || '')}
@@ -440,16 +462,18 @@ function TableAlignmentFields({
   );
 }
 
-function PanelShell({ title, subtitle: _subtitle, icon, children }: { title: string; subtitle: string; icon: ReactNode; children: ReactNode }) {
+function PanelShell({ title, subtitle: _subtitle, icon, shifted = false, children }: { title: string; subtitle: string; icon: ReactNode; shifted?: boolean; children: ReactNode }) {
   return (
-    <div className="absolute right-4 top-20 z-30 w-[17.5rem] max-w-[calc(100vw-2rem)] rounded-xl border border-neutral-200/80 bg-white/95 p-2.5 text-left shadow-xl shadow-neutral-900/10 backdrop-blur-md">
-      <div className="mb-2.5 flex items-start gap-2 border-b border-neutral-100 pb-2">
+    <div className={`absolute top-20 z-30 flex max-h-[calc(100vh-10rem)] w-[17.5rem] max-w-[calc(100vw-2rem)] flex-col rounded-xl border border-neutral-200/80 bg-white/95 p-2.5 text-left shadow-xl shadow-neutral-900/10 backdrop-blur-md ${
+      shifted ? 'right-[21rem]' : 'right-4'
+    }`}>
+      <div className="mb-2.5 flex shrink-0 items-start gap-2 border-b border-neutral-100 pb-2">
         <div className="mt-0.5 text-neutral-500">{icon}</div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-neutral-900">{title}</h3>
         </div>
       </div>
-      <div className="space-y-2">{children}</div>
+      <div className="min-h-0 space-y-2 overflow-y-auto">{children}</div>
     </div>
   );
 }

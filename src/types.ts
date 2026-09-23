@@ -40,6 +40,13 @@ export interface CanvasNodeHandleData {
   offset: number;
 }
 
+export type ShotSlotKind = 'appearance' | 'broll' | 'graphic' | 'sfx' | 'subtitle';
+
+export interface ShotSlotBinding {
+  slot: ShotSlotKind;
+  materialId: string | null;
+}
+
 interface BaseCanvasNodeData extends Record<string, unknown> {
   id: string;
   type: NodeType;
@@ -53,6 +60,11 @@ interface BaseCanvasNodeData extends Record<string, unknown> {
   imageUrl?: string;
   imageCaption?: string;
   customHandles?: CanvasNodeHandleData[];
+  scene?: string;
+  estimatedSeconds?: number;
+  actualSeconds?: number;
+  shotDone?: boolean;
+  shotSlots?: ShotSlotBinding[];
   createdAt: number;
 }
 

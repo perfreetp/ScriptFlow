@@ -1,10 +1,11 @@
 import React, { memo, useContext, useEffect, useRef, useState } from 'react';
-import { Check, Edit3, FileText, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check, Clapperboard, Edit3, FileText, Trash2 } from 'lucide-react';
 import { NodeActionContext } from './NodeActionContext';
 import CardResizeControls from './CardResizeControls';
 import StandardHandles from './StandardHandles';
 import { useDynamicHandleClick } from './useDynamicHandleClick';
 import type { TextCanvasNodeData } from '../../../types';
+import { getBoundSlotCount, getMissingRequiredSlots } from '../../production/utils/productionUtils';
 
 const DEFAULT_TEXT_NODE_WIDTH = 280;
 const TEXT_NODE_MIN_HEIGHT = 120;
@@ -214,7 +215,10 @@ export const TextNode = memo(({ id, data, selected }: { id: string; data: TextCa
 
       {/* Node Footer Meta */}
       <div className="flex shrink-0 justify-between items-center px-3.5 py-1.5 bg-neutral-50/20 border-t border-neutral-50 text-[10px] text-neutral-400 select-none rounded-b-lg">
-          <span>{data.status || '文本切片'}</span>
+        <span className="flex items-center gap-1.5 min-w-0">
+          <span className="truncate">{data.status || '文本切片'}</span>
+          <ShotSlotBadge data={data} />
+        </span>
         <span>ID: {id.slice(0, 6)}</span>
       </div>
     </div>
@@ -223,4 +227,33 @@ export const TextNode = memo(({ id, data, selected }: { id: string; data: TextCa
 
 TextNode.displayName = 'TextNode';
 
+function ShotSlotBadge({ data }: { data: TextCanvasNodeData }) {
+  const boundCount = getBoundSlotCount(data);
+  const missingCount = getMissingRequiredSlots(data).length;
 
+  if (boundCount === 0 && missingCount === 0) return null;
+
+  if (missingCount > 0) {
+    return (
+      <span
+        className="flex items-center gap-0.5 rounded bg-amber-100 px-1 py-0.5 font-medium text-amber-700"
+        data-tooltip="缺少关键槽位素材"
+        data-tooltip-placement="top"
+      >
+        <AlertTriangle className="h-2.5 w-2.5" />
+        缺槽位
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="flex items-center gap-0.5 rounded bg-neutral-100 px-1 py-0.5 font-medium text-neutral-500"
+      data-tooltip={`已绑定 ${boundCount} 个素材`}
+      data-tooltip-placement="top"
+    >
+      <Clapperboard className="h-2.5 w-2.5" />
+      {boundCount}
+    </span>
+  );
+}

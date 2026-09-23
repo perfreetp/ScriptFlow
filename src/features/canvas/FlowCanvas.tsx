@@ -17,6 +17,9 @@ import { useCanvasShortcuts } from './hooks/useCanvasShortcuts';
 import { useCanvasTemplates } from './hooks/useCanvasTemplates';
 import { createImageNodeFromAsset, createMediaAsset } from './utils/mediaAssetUtils';
 import type { FlowCanvasProps, ViewportHandlers, ViewportShellHandlers } from './types';
+import { useProductionMaterials } from '../production/hooks/useProductionMaterials';
+import { orderShotNodes } from '../production/utils/productionUtils';
+import type { TeleprompterRecording } from '../production/components/TeleprompterOverlay';
 
 export default function FlowCanvas({
   nodes,
@@ -48,6 +51,33 @@ export default function FlowCanvas({
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [isTemplatePanelOpen, setIsTemplatePanelOpen] = useState(false);
   const [timelineFocusDisabledIds, setTimelineFocusDisabledIds] = useState<Set<string>>(() => new Set());
+  const [isProductionPanelOpen, setIsProductionPanelOpen] = useState(false);
+  const [teleprompterStartNodeId, setTeleprompterStartNodeId] = useState<string | null>(null);
+
+  const productionMaterials = useProductionMaterials();
+  const shotNodes = useMemo(() => orderShotNodes(nodes), [nodes]);
+
+  const handleToggleShotDone = useCallback((nodeId: string, done: boolean) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) =>
+        node.id === nodeId ? { ...node, data: { ...node.data, shotDone: done } } : node,
+      ),
+    );
+  }, [setNodes]);
+
+  const handleTeleprompterFinish = useCallback((recordings: TeleprompterRecording[]) => {
+    if (recordings.length > 0) {
+      setNodes((currentNodes) =>
+        currentNodes.map((node) => {
+          const recording = recordings.find((item) => item.nodeId === node.id);
+          return recording
+            ? { ...node, data: { ...node.data, actualSeconds: recording.actualSeconds } }
+            : node;
+        }),
+      );
+    }
+    setTeleprompterStartNodeId(null);
+  }, [setNodes]);
 
   const pointerPan = useCanvasPointerPan();
   const edgeCommands = useCanvasEdgeCommands({ setEdges });
@@ -163,6 +193,7 @@ export default function FlowCanvas({
       setIsDrawerOpen(false);
       mediaLibrary.setOpen(false);
       setIsTemplatePanelOpen(false);
+      setIsProductionPanelOpen(false);
     },
     onUndo,
     onRedo,
@@ -176,6 +207,7 @@ export default function FlowCanvas({
       setIsDrawerOpen(false);
       setIsMenuOpen(false);
       setIsTemplatePanelOpen(false);
+      setIsProductionPanelOpen(false);
     },
     onToggleMoreTools: () => {
       setIsDrawerOpen((open) => {
@@ -185,6 +217,7 @@ export default function FlowCanvas({
       });
       mediaLibrary.setOpen(false);
       setIsMenuOpen(false);
+      setIsProductionPanelOpen(false);
     },
     onCopySelection: clipboard.copySelectedNodes,
     onPasteSelection: () => clipboard.pasteNodes(),
@@ -432,6 +465,7 @@ export default function FlowCanvas({
                 setIsDrawerOpen(false);
                 mediaLibrary.setOpen(false);
                 setIsTemplatePanelOpen(false);
+                setIsProductionPanelOpen(false);
               }
             },
             onAutoLayout: nodeCommands.autoLayout,
@@ -450,6 +484,8 @@ export default function FlowCanvas({
             onResizeNodes: nodeCommands.resizeNodesFromPanel,
             onUpdateEdge: edgeCommands.updateEdgeFromPanel,
             onSaveSelectionAsTemplate: templates.saveSelectionAsTemplate,
+            productionMaterials: productionMaterials.materials,
+            onOpenTeleprompter: (nodeId: string) => setTeleprompterStartNodeId(nodeId),
           }}
           contextMenu={{
             state: contextMenu.contextMenu,
@@ -472,11 +508,20 @@ export default function FlowCanvas({
             saveError,
             shortcuts,
             mediaLibraryOpen: mediaLibrary.isOpen,
+            productionPanelOpen: isProductionPanelOpen,
             onToggleMediaLibrary: () => {
               const nextState = !mediaLibrary.isOpen;
               mediaLibrary.setOpen(nextState);
               setIsDrawerOpen(false);
               setIsMenuOpen(false);
+              setIsTemplatePanelOpen(false);
+              setIsProductionPanelOpen(false);
+            },
+            onToggleProductionPanel: () => {
+              setIsProductionPanelOpen((open) => !open);
+              setIsDrawerOpen(false);
+              setIsMenuOpen(false);
+              mediaLibrary.setOpen(false);
               setIsTemplatePanelOpen(false);
             },
             onToggleDrawer: () => {
@@ -486,6 +531,7 @@ export default function FlowCanvas({
                 setIsMenuOpen(false);
                 mediaLibrary.setOpen(false);
                 setIsTemplatePanelOpen(false);
+                setIsProductionPanelOpen(false);
               }
             },
             onOpenTemplates: () => {
@@ -493,9 +539,26 @@ export default function FlowCanvas({
               setIsDrawerOpen(false);
               setIsMenuOpen(false);
               mediaLibrary.setOpen(false);
+              setIsProductionPanelOpen(false);
               edgeCommands.setSelectedEdge(null);
             },
             onAddNode: nodeCommands.addNode,
+          }}
+          production={{
+            isOpen: isProductionPanelOpen,
+            nodes,
+            materials: productionMaterials.materials,
+            onAddMaterial: productionMaterials.addMaterial,
+            onUpdateMaterial: productionMaterials.updateMaterial,
+            onDeleteMaterial: productionMaterials.deleteMaterial,
+            onToggleShotDone: handleToggleShotDone,
+            onClose: () => setIsProductionPanelOpen(false),
+          }}
+          teleprompter={{
+            startNodeId: teleprompterStartNodeId,
+            shots: shotNodes,
+            onFinish: handleTeleprompterFinish,
+            onClose: () => setTeleprompterStartNodeId(null),
           }}
           mediaLibrary={mediaLibrary}
           templates={{
