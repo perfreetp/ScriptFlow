@@ -10,7 +10,11 @@ import MediaLibraryDrawer from './components/MediaLibraryDrawer';
 import CanvasTemplatePanel from './components/CanvasTemplatePanel';
 import AssemblyPreviewModal from './components/AssemblyPreviewModal';
 import ClearCanvasConfirmModal from './components/ClearCanvasConfirmModal';
-import type { AutoSaveStatus, CanvasNodeData, WorkspaceNode, WorkspaceSaveState } from '../../types';
+import StoryboardPanel from './components/StoryboardPanel';
+import VariablesPanel from './components/VariablesPanel';
+import UnresolvedVariablesModal from './components/UnresolvedVariablesModal';
+import type { AutoSaveStatus, CanvasNodeData, SceneGroup, WorkspaceNode, WorkspaceSaveState } from '../../types';
+import type { VariableUsage } from './utils/variableUtils';
 import type { ShortcutMap } from '../shortcuts';
 import type {
   CanvasAssemblyState,
@@ -23,6 +27,9 @@ interface CanvasOverlaysProps {
   header: {
     onExportState: () => void;
     onImportState: (state: WorkspaceSaveState) => void;
+    onImportMarkdown: (markdown: string) => void;
+    onExportMarkdown: () => void;
+    onExportCsv: () => void;
     canUndo: boolean;
     canRedo: boolean;
     onUndo: () => void;
@@ -50,6 +57,10 @@ interface CanvasOverlaysProps {
     state: CanvasContextMenuState | null;
     selectedCount: number;
     canPaste: boolean;
+    canGroup: boolean;
+    hasGroupedSelection: boolean;
+    onCreateGroup: () => void;
+    onUngroupSelection: () => void;
     onCopy: () => void;
     onPaste: () => void;
     onDelete: () => void;
@@ -67,6 +78,10 @@ interface CanvasOverlaysProps {
     saveError: string | null;
     shortcuts: ShortcutMap;
     mediaLibraryOpen: boolean;
+    storyboardOpen: boolean;
+    variablesOpen: boolean;
+    onToggleStoryboard: () => void;
+    onToggleVariables: () => void;
     onToggleMediaLibrary: () => void;
     onToggleDrawer: () => void;
     onOpenTemplates: () => void;
@@ -79,6 +94,32 @@ interface CanvasOverlaysProps {
     open: boolean;
     onCancel: () => void;
     onConfirm: () => void;
+  };
+  storyboard: {
+    isOpen: boolean;
+    nodes: WorkspaceNode[];
+    edges: Edge[];
+    groups: SceneGroup[];
+    shotOrder: string[];
+    onShotOrderChange: (order: string[]) => void;
+    durationThreshold: number;
+    onDurationThresholdChange: (seconds: number) => void;
+    onClose: () => void;
+  };
+  variablesPanel: {
+    isOpen: boolean;
+    nodes: WorkspaceNode[];
+    variables: Record<string, string>;
+    onVariablesChange: (variables: Record<string, string>) => void;
+    onApplyGlobalReplace: () => void;
+    onClose: () => void;
+  };
+  unresolvedExport: {
+    kind: 'markdown' | 'csv' | null;
+    unresolved: VariableUsage[];
+    onOpenVariables: () => void;
+    onExportAnyway: () => void;
+    onClose: () => void;
   };
   children?: ReactNode;
 }
@@ -93,12 +134,18 @@ export default function CanvasOverlays({
   templates,
   assembly,
   clearCanvas,
+  storyboard,
+  variablesPanel,
+  unresolvedExport,
 }: CanvasOverlaysProps) {
   return (
     <>
       <CanvasHeader
         onExportState={header.onExportState}
         onImportState={header.onImportState}
+        onImportMarkdown={header.onImportMarkdown}
+        onExportMarkdown={header.onExportMarkdown}
+        onExportCsv={header.onExportCsv}
         menuOpen={header.menuOpen}
         onMenuOpenChange={header.onMenuOpenChange}
         leadingActions={(
@@ -145,6 +192,10 @@ export default function CanvasOverlays({
           y={contextMenu.state.y}
           selectedCount={contextMenu.selectedCount}
           canPaste={contextMenu.canPaste}
+          canGroup={contextMenu.canGroup}
+          hasGroupedSelection={contextMenu.hasGroupedSelection}
+          onCreateGroup={contextMenu.onCreateGroup}
+          onUngroupSelection={contextMenu.onUngroupSelection}
           onCopy={contextMenu.onCopy}
           onPaste={contextMenu.onPaste}
           onDelete={contextMenu.onDelete}
@@ -159,11 +210,15 @@ export default function CanvasOverlays({
       <CanvasToolbar
         isDrawerOpen={toolbar.isDrawerOpen}
         isMediaLibraryOpen={toolbar.mediaLibraryOpen}
+        isStoryboardOpen={toolbar.storyboardOpen}
+        isVariablesOpen={toolbar.variablesOpen}
         mediaAssetCount={toolbar.mediaAssetCount}
         saveStatus={toolbar.saveStatus}
         lastSavedAt={toolbar.lastSavedAt}
         saveError={toolbar.saveError}
         shortcuts={toolbar.shortcuts}
+        onToggleStoryboard={toolbar.onToggleStoryboard}
+        onToggleVariables={toolbar.onToggleVariables}
         onToggleMediaLibrary={toolbar.onToggleMediaLibrary}
         onToggleDrawer={toolbar.onToggleDrawer}
         onOpenTemplates={toolbar.onOpenTemplates}
@@ -194,6 +249,38 @@ export default function CanvasOverlays({
         open={clearCanvas.open}
         onCancel={clearCanvas.onCancel}
         onConfirm={clearCanvas.onConfirm}
+      />
+
+      {storyboard.isOpen && (
+        <StoryboardPanel
+          nodes={storyboard.nodes}
+          edges={storyboard.edges}
+          groups={storyboard.groups}
+          shotOrder={storyboard.shotOrder}
+          onShotOrderChange={storyboard.onShotOrderChange}
+          durationThreshold={storyboard.durationThreshold}
+          onDurationThresholdChange={storyboard.onDurationThresholdChange}
+          onClose={storyboard.onClose}
+        />
+      )}
+
+      {variablesPanel.isOpen && (
+        <VariablesPanel
+          nodes={variablesPanel.nodes}
+          variables={variablesPanel.variables}
+          onVariablesChange={variablesPanel.onVariablesChange}
+          onApplyGlobalReplace={variablesPanel.onApplyGlobalReplace}
+          onClose={variablesPanel.onClose}
+        />
+      )}
+
+      <UnresolvedVariablesModal
+        open={unresolvedExport.kind !== null}
+        unresolved={unresolvedExport.unresolved}
+        exportLabel={unresolvedExport.kind === 'csv' ? 'CSV 分镜表导出' : 'Markdown 导出'}
+        onOpenVariables={unresolvedExport.onOpenVariables}
+        onExportAnyway={unresolvedExport.onExportAnyway}
+        onClose={unresolvedExport.onClose}
       />
     </>
   );

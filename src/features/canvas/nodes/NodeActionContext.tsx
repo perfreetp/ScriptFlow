@@ -20,6 +20,12 @@ export interface NodeActionContextProps {
   setEditingId?: (id: string | null) => void;
   selectedNodeCount?: number;
   shortcuts?: ShortcutMap;
+  variables?: Record<string, string>;
+  onToggleGroupCollapse?: (groupId: string) => void;
+  onToggleGroupLock?: (groupId: string) => void;
+  onRenameGroup?: (groupId: string, name: string) => void;
+  onSetGroupColor?: (groupId: string, color: string) => void;
+  onUngroup?: (groupId: string) => void;
 }
 
 export const NodeActionContext = createContext<NodeActionContextProps>({});

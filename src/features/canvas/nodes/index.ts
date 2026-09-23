@@ -6,4 +6,6 @@ export { ImageNode } from './ImageNode';
 export { IdeaNode } from './IdeaNode';
 export { TableNode } from './TableNode';
 export { TimelineNode } from './TimelineNode';
+export { GroupCardNode } from './GroupCardNode';
+export { GroupFrameNode } from './GroupFrameNode';
 export type { TimelineTick, TimelineTrackDataState } from './TimelineNode';

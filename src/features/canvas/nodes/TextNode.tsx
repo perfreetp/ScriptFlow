@@ -5,6 +5,7 @@ import CardResizeControls from './CardResizeControls';
 import StandardHandles from './StandardHandles';
 import { useDynamicHandleClick } from './useDynamicHandleClick';
 import type { TextCanvasNodeData } from '../../../types';
+import { splitTextByVariables } from '../utils/variableUtils';
 
 const DEFAULT_TEXT_NODE_WIDTH = 280;
 const TEXT_NODE_MIN_HEIGHT = 120;
@@ -13,7 +14,7 @@ const TEXT_NODE_BODY_HORIZONTAL_PADDING = 32;
 const TEXT_NODE_DISPLAY_VERTICAL_CHROME = 104;
 
 export const TextNode = memo(({ id, data, selected }: { id: string; data: TextCanvasNodeData; selected?: boolean }) => {
-  const { onDeleteNode, onUpdateContent, editingId, setEditingId } = useContext(NodeActionContext);
+  const { onDeleteNode, onUpdateContent, editingId, setEditingId, variables } = useContext(NodeActionContext);
   const isEditing = editingId === id;
   const setIsEditing = (val: boolean) => {
     if (setEditingId) {
@@ -207,7 +208,27 @@ export const TextNode = memo(({ id, data, selected }: { id: string; data: TextCa
           />
         ) : (
           <p className="h-full min-h-0 w-full overflow-y-auto break-words text-xs font-sans leading-relaxed text-neutral-600 whitespace-pre-wrap [overflow-wrap:anywhere] select-text">
-            {data.content || <span className="text-neutral-400 italic">空白文本卡片... 双击进行编辑</span>}
+            {data.content
+              ? splitTextByVariables(data.content).map((segment, index) => {
+                  if (!segment.variableName) {
+                    return <span key={index}>{segment.text}</span>;
+                  }
+                  const value = variables?.[segment.variableName]?.trim();
+                  return (
+                    <span
+                      key={index}
+                      data-tooltip={value ? `变量 ${segment.variableName} = ${value}` : `变量 ${segment.variableName} 未填充`}
+                      className={`rounded px-0.5 font-medium ${
+                        value
+                          ? 'bg-sky-100/70 text-sky-800'
+                          : 'bg-amber-100/80 text-amber-800'
+                      }`}
+                    >
+                      {value || segment.text}
+                    </span>
+                  );
+                })
+              : <span className="text-neutral-400 italic">空白文本卡片... 双击进行编辑</span>}
           </p>
         )}
       </div>
@@ -222,5 +243,4 @@ export const TextNode = memo(({ id, data, selected }: { id: string; data: TextCa
 });
 
 TextNode.displayName = 'TextNode';
-
 

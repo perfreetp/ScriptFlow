@@ -1,5 +1,7 @@
 import {
   Boxes,
+  Braces,
+  Clapperboard,
   Eraser,
   Film,
   FolderOpen,
@@ -22,11 +24,15 @@ import type { ShortcutMap } from '../../shortcuts';
 interface CanvasToolbarProps {
   isDrawerOpen: boolean;
   isMediaLibraryOpen: boolean;
+  isStoryboardOpen: boolean;
+  isVariablesOpen: boolean;
   mediaAssetCount: number;
   saveStatus: AutoSaveStatus;
   lastSavedAt: number | null;
   saveError: string | null;
   shortcuts: ShortcutMap;
+  onToggleStoryboard: () => void;
+  onToggleVariables: () => void;
   onToggleMediaLibrary: () => void;
   onToggleDrawer: () => void;
   onOpenTemplates: () => void;
@@ -36,11 +42,15 @@ interface CanvasToolbarProps {
 export default function CanvasToolbar({
   isDrawerOpen,
   isMediaLibraryOpen,
+  isStoryboardOpen,
+  isVariablesOpen,
   mediaAssetCount,
   saveStatus,
   lastSavedAt,
   saveError,
   shortcuts,
+  onToggleStoryboard,
+  onToggleVariables,
   onToggleMediaLibrary,
   onToggleDrawer,
   onOpenTemplates,
@@ -73,6 +83,14 @@ export default function CanvasToolbar({
           </ToolbarIconButton>
 
           <div className="mx-1 h-5 w-px bg-neutral-200" />
+
+          <ToolbarIconButton title="分镜时间轴" onClick={onToggleStoryboard} active={isStoryboardOpen}>
+            <Clapperboard className="h-4 w-4" />
+          </ToolbarIconButton>
+
+          <ToolbarIconButton title="变量管理" onClick={onToggleVariables} active={isVariablesOpen}>
+            <Braces className="h-4 w-4" />
+          </ToolbarIconButton>
 
           <ToolbarIconButton title="配图库" shortcut={shortcuts['canvas.toggleMediaLibrary']} onClick={onToggleMediaLibrary} active={isMediaLibraryOpen}>
             <span className="relative">

@@ -11,8 +11,9 @@ import FlowCanvas from '../features/canvas';
 import TiptapEditor from '../features/script-editor';
 import { DEFAULT_SHORTCUTS, SHORTCUT_STORAGE_KEY, ShortcutMap, ShortcutSettingsPanel } from '../features/shortcuts';
 import { normalizeEdgeHandles } from '../features/canvas/utils/normalizeEdgeHandles';
-import { AutoSaveStatus, WorkspaceSaveState, WorkspaceNode, NodeType } from '../types';
+import { AutoSaveStatus, SceneGroup, WorkspaceSaveState, WorkspaceNode, NodeType } from '../types';
 import { dbGet, dbSet, removeLegacyLocalStorageKeys } from '../shared/storage/db';
+import { DEFAULT_SHOT_DURATION_THRESHOLD } from '../features/canvas/utils/storyboardUtils';
 
 const STORAGE_KEY = 'visual_text_flow_state';
 const MAX_HISTORY_ENTRIES = 50;
@@ -37,6 +38,10 @@ export default function App() {
   const [mainDocHtml, setMainDocHtml] = useState<string>('');
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkspaceNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [groups, setGroups] = useState<SceneGroup[]>([]);
+  const [variables, setVariables] = useState<Record<string, string>>({});
+  const [shotOrder, setShotOrder] = useState<string[]>([]);
+  const [shotDurationThreshold, setShotDurationThreshold] = useState<number>(DEFAULT_SHOT_DURATION_THRESHOLD);
   
   // Responsive mode select: 'split' | 'editor' | 'canvas' 
   const [activeTab, setActiveTab] = useState<'editor' | 'canvas' | 'split'>('split');
@@ -120,8 +125,12 @@ export default function App() {
         style: e.style,
         markerEnd: e.markerEnd,
       })),
+      groups,
+      variables,
+      shotOrder,
+      shotDurationThreshold,
     };
-  }, [mainDocHtml, nodes, edges]);
+  }, [mainDocHtml, nodes, edges, groups, variables, shotOrder, shotDurationThreshold]);
 
   const cloneWorkspaceSnapshot = useCallback((snapshot: WorkspaceSaveState): WorkspaceSaveState => {
     return JSON.parse(JSON.stringify(snapshot));
@@ -140,6 +149,10 @@ export default function App() {
     setMainDocHtml(snapshot.mainDocumentHtml || '');
     setNodes(nextNodes);
     setEdges(normalizeEdgeHandles(nextNodes, (snapshot.edges || []) as Edge[]));
+    setGroups(snapshot.groups || []);
+    setVariables(snapshot.variables || {});
+    setShotOrder(snapshot.shotOrder || []);
+    setShotDurationThreshold(snapshot.shotDurationThreshold || DEFAULT_SHOT_DURATION_THRESHOLD);
   }, [setNodes, setEdges]);
 
   // Initialize and load saved state or defaults
@@ -152,6 +165,10 @@ export default function App() {
           setMainDocHtml(parsed.mainDocumentHtml || '');
           setNodes(nextNodes);
           setEdges(normalizeEdgeHandles(nextNodes, (parsed.edges as Edge[]) || []));
+          setGroups(parsed.groups || []);
+          setVariables(parsed.variables || {});
+          setShotOrder(parsed.shotOrder || []);
+          setShotDurationThreshold(parsed.shotDurationThreshold || DEFAULT_SHOT_DURATION_THRESHOLD);
           removeLegacyLocalStorageKeys();
           setIsLoaded(true);
           return;
@@ -210,7 +227,7 @@ export default function App() {
   // Local Database Save Sync Effect with Debounce to prevent lag during dragging or typing
   useEffect(() => {
     if (!isLoaded) return;
-    if (mainDocHtml === '' && nodes.length === 0 && edges.length === 0) return;
+    if (mainDocHtml === '' && nodes.length === 0 && edges.length === 0 && groups.length === 0) return;
 
     setSaveStatus('pending');
     setSaveError(null);
@@ -228,11 +245,11 @@ export default function App() {
     }, 800); // 800ms debounce ensures zero performance footprint during continuous drag/typing
 
     return () => clearTimeout(timeoutId);
-  }, [mainDocHtml, nodes, edges, isLoaded, createWorkspaceSnapshot]);
+  }, [mainDocHtml, nodes, edges, groups, variables, shotOrder, shotDurationThreshold, isLoaded, createWorkspaceSnapshot]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (mainDocHtml === '' && nodes.length === 0 && edges.length === 0) return;
+    if (mainDocHtml === '' && nodes.length === 0 && edges.length === 0 && groups.length === 0) return;
 
     const currentSnapshot = createWorkspaceSnapshot();
     const currentSignature = JSON.stringify(currentSnapshot);
@@ -267,7 +284,7 @@ export default function App() {
     }, 600);
 
     return () => clearTimeout(timeoutId);
-  }, [mainDocHtml, nodes, edges, isLoaded, createWorkspaceSnapshot, updateHistoryAvailability]);
+  }, [mainDocHtml, nodes, edges, groups, variables, shotOrder, shotDurationThreshold, isLoaded, createWorkspaceSnapshot, updateHistoryAvailability]);
 
   const handleUndoWorkspace = useCallback(() => {
     const previousSnapshot = undoStackRef.current.pop();
@@ -313,6 +330,10 @@ export default function App() {
     setMainDocHtml(state.mainDocumentHtml || '');
     setNodes(nextNodes);
     setEdges(normalizeEdgeHandles(nextNodes, (state.edges || []) as Edge[]));
+    setGroups(state.groups || []);
+    setVariables(state.variables || {});
+    setShotOrder(state.shotOrder || []);
+    setShotDurationThreshold(state.shotDurationThreshold || DEFAULT_SHOT_DURATION_THRESHOLD);
   }, [setNodes, setEdges]);
 
   // Custom text extraction into Canvas TextNode
@@ -415,6 +436,14 @@ export default function App() {
               onEdgesChange={onEdgesChange}
               setNodes={setNodes}
               setEdges={setEdges}
+              groups={groups}
+              setGroups={setGroups}
+              variables={variables}
+              setVariables={setVariables}
+              shotOrder={shotOrder}
+              setShotOrder={setShotOrder}
+              shotDurationThreshold={shotDurationThreshold}
+              setShotDurationThreshold={setShotDurationThreshold}
               onUpdateMainDocument={handleUpdateMainDoc}
               onExportState={handleExportState}
               onImportState={handleImportState}

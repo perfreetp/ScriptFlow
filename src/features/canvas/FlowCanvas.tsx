@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useReactFlow } from '@xyflow/react';
-import type { Edge } from '@xyflow/react';
+import type { Edge, NodeChange } from '@xyflow/react';
 import { NodeActionContext } from './nodes';
 import { CANVAS_NODE_TYPES } from './constants';
 import CanvasOverlays from './CanvasOverlays';
@@ -9,6 +9,7 @@ import { useCanvasAssembly } from './hooks/useCanvasAssembly';
 import { useCanvasClipboard } from './hooks/useCanvasClipboard';
 import { useCanvasContextMenu } from './hooks/useCanvasContextMenu';
 import { useCanvasEdgeCommands } from './hooks/useCanvasEdgeCommands';
+import { useCanvasGroups } from './hooks/useCanvasGroups';
 import { useCanvasMediaLibrary } from './hooks/useCanvasMediaLibrary';
 import { useCanvasNodeCommands } from './hooks/useCanvasNodeCommands';
 import { useCanvasPointerPan } from './hooks/useCanvasPointerPan';
@@ -16,6 +17,12 @@ import { useCanvasPresentation } from './hooks/useCanvasPresentation';
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts';
 import { useCanvasTemplates } from './hooks/useCanvasTemplates';
 import { createImageNodeFromAsset, createMediaAsset } from './utils/mediaAssetUtils';
+import { deriveGroupedDisplay, getGroupForNode, getLockedNodeIds, isSyntheticGroupNodeId, parseGroupCardId } from './utils/groupUtils';
+import { parseMarkdownOutline, exportStoryboardMarkdown, exportStoryboardCsv, downloadTextFile } from './utils/markdownOutline';
+import { collectUnresolvedVariables, replaceVariablesInText, type VariableUsage } from './utils/variableUtils';
+import { computeShotSequence } from './utils/storyboardUtils';
+import { useFeedback } from '../../shared/feedback/FeedbackProvider';
+import type { WorkspaceNode } from '../../types';
 import type { FlowCanvasProps, ViewportHandlers, ViewportShellHandlers } from './types';
 
 export default function FlowCanvas({
@@ -25,6 +32,14 @@ export default function FlowCanvas({
   onEdgesChange,
   setNodes,
   setEdges,
+  groups,
+  setGroups,
+  variables,
+  setVariables,
+  shotOrder,
+  setShotOrder,
+  shotDurationThreshold,
+  setShotDurationThreshold,
   onUpdateMainDocument,
   onExportState,
   onImportState,
@@ -41,12 +56,16 @@ export default function FlowCanvas({
   onOpenShortcutSettings,
 }: FlowCanvasProps) {
   const { screenToFlowPosition, fitView, zoomIn, zoomOut } = useReactFlow();
+  const { toast } = useFeedback();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showHints, setShowHints] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [isTemplatePanelOpen, setIsTemplatePanelOpen] = useState(false);
+  const [isStoryboardOpen, setIsStoryboardOpen] = useState(false);
+  const [isVariablesOpen, setIsVariablesOpen] = useState(false);
+  const [pendingExport, setPendingExport] = useState<'markdown' | 'csv' | null>(null);
   const [timelineFocusDisabledIds, setTimelineFocusDisabledIds] = useState<Set<string>>(() => new Set());
 
   const pointerPan = useCanvasPointerPan();
@@ -89,11 +108,15 @@ export default function FlowCanvas({
     contextMenu.closeContextMenu();
   }, [contextMenu]);
 
+  const groupCommands = useCanvasGroups({ groups, nodes, setGroups, setNodes });
+  const lockedNodeIds = useMemo(() => getLockedNodeIds(groups), [groups]);
+
   const nodeCommands = useCanvasNodeCommands({
     selectedNodes: presentation.selectedNodes,
     setNodes,
     setEdges,
     getCenteredNodePosition,
+    lockedNodeIds,
     pendingExtractedSlice,
     onExtractedSlicePlaced,
     onAfterAddNode: () => setIsDrawerOpen(false),
@@ -130,6 +153,133 @@ export default function FlowCanvas({
     setEdges,
     getCenteredNodePosition,
   });
+
+  // Prune group membership when member nodes are deleted; drop empty groups.
+  useEffect(() => {
+    setGroups((currentGroups) => {
+      if (currentGroups.length === 0) return currentGroups;
+      const nodeIds = new Set(nodes.map((node) => node.id));
+      const nextGroups = currentGroups
+        .map((group) => ({ ...group, nodeIds: group.nodeIds.filter((id) => nodeIds.has(id)) }))
+        .filter((group) => group.nodeIds.length > 0);
+      const changed = nextGroups.length !== currentGroups.length
+        || nextGroups.some((group, index) => group.nodeIds.length !== currentGroups[index].nodeIds.length);
+      return changed ? nextGroups : currentGroups;
+    });
+  }, [nodes, setGroups]);
+
+  const groupedDisplay = useMemo(
+    () => deriveGroupedDisplay(presentation.displayNodes, presentation.displayEdges, groups),
+    [presentation.displayNodes, presentation.displayEdges, groups],
+  );
+
+  const viewportNodes = useMemo(
+    () => groupedDisplay.nodes.map((node) => (
+      lockedNodeIds.has(node.id) ? { ...node, draggable: false } : node
+    )),
+    [groupedDisplay.nodes, lockedNodeIds],
+  );
+
+  // Route synthetic group node changes (card dragging) into group state.
+  const handleNodesChange = useCallback((changes: NodeChange<WorkspaceNode>[]) => {
+    const realChanges: NodeChange<WorkspaceNode>[] = [];
+    changes.forEach((change) => {
+      if (!('id' in change) || !isSyntheticGroupNodeId(change.id)) {
+        realChanges.push(change);
+        return;
+      }
+      const groupId = parseGroupCardId(change.id);
+      if (groupId && change.type === 'position' && change.position) {
+        groupCommands.updateGroupCardPosition(groupId, change.position);
+      }
+    });
+    if (realChanges.length > 0) {
+      onNodesChange(realChanges);
+    }
+  }, [groupCommands, onNodesChange]);
+
+  const handleCreateGroup = useCallback(() => {
+    groupCommands.createGroupFromSelection(presentation.selectedNodes);
+    closeTransientUi();
+  }, [closeTransientUi, groupCommands, presentation.selectedNodes]);
+
+  const handleUngroupSelection = useCallback(() => {
+    const groupIds = new Set(
+      presentation.selectedNodes
+        .map((node) => getGroupForNode(groups, node.id)?.id)
+        .filter((id): id is string => !!id),
+    );
+    if (groupIds.size === 0) return;
+    setGroups((currentGroups) => currentGroups.filter((group) => !groupIds.has(group.id)));
+    closeTransientUi();
+  }, [closeTransientUi, groups, presentation.selectedNodes, setGroups]);
+
+  const hasGroupedSelection = useMemo(
+    () => presentation.selectedNodes.some((node) => !!getGroupForNode(groups, node.id)),
+    [groups, presentation.selectedNodes],
+  );
+
+  const handleApplyGlobalReplace = useCallback(() => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          title: node.data.title ? replaceVariablesInText(node.data.title, variables) : node.data.title,
+          content: replaceVariablesInText(node.data.content || '', variables),
+        },
+      })),
+    );
+    toast('已将已填充的变量全局替换到节点文本。', 'success');
+  }, [setNodes, toast, variables]);
+
+  const storyboardShots = useMemo(
+    () => computeShotSequence(nodes, edges, groups, shotOrder),
+    [nodes, edges, groups, shotOrder],
+  );
+
+  const unresolvedVariables = useMemo<VariableUsage[]>(
+    () => collectUnresolvedVariables(nodes, variables),
+    [nodes, variables],
+  );
+
+  const runExport = useCallback((kind: 'markdown' | 'csv') => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    if (kind === 'markdown') {
+      downloadTextFile(
+        `scriptflow-storyboard-${stamp}.md`,
+        exportStoryboardMarkdown(storyboardShots, storyboardShots.reduce((sum, shot) => sum + shot.durationSec, 0)),
+        'text/markdown;charset=utf-8',
+      );
+    } else {
+      downloadTextFile(
+        `scriptflow-storyboard-${stamp}.csv`,
+        exportStoryboardCsv(storyboardShots),
+        'text/csv;charset=utf-8',
+      );
+    }
+  }, [storyboardShots]);
+
+  const requestExport = useCallback((kind: 'markdown' | 'csv') => {
+    if (unresolvedVariables.length > 0) {
+      setPendingExport(kind);
+      return;
+    }
+    runExport(kind);
+  }, [runExport, unresolvedVariables.length]);
+
+  const handleImportMarkdown = useCallback((markdown: string) => {
+    const { nodes: importedNodes, groups: importedGroups } = parseMarkdownOutline(markdown);
+    if (importedNodes.length === 0 && importedGroups.length === 0) {
+      toast('未从 Markdown 中识别到标题或列表项。', 'error');
+      return;
+    }
+    setNodes((currentNodes) => [...currentNodes, ...importedNodes]);
+    if (importedGroups.length > 0) {
+      setGroups((currentGroups) => [...currentGroups, ...importedGroups]);
+    }
+    toast(`已从 Markdown 生成 ${importedNodes.length} 个节点、${importedGroups.length} 个分组。`, 'success');
+  }, [setGroups, setNodes, toast]);
 
   const addImageFilesToCanvas = useCallback((files: File[], clientX: number, clientY: number) => {
     const imageFiles = files.filter((file) => file.type.startsWith('image/'));
@@ -271,9 +421,20 @@ export default function FlowCanvas({
     setEditingId,
     selectedNodeCount: presentation.selectedNodes.length,
     shortcuts,
+    variables,
+    onToggleGroupCollapse: groupCommands.toggleGroupCollapse,
+    onToggleGroupLock: groupCommands.toggleGroupLock,
+    onRenameGroup: groupCommands.renameGroup,
+    onSetGroupColor: groupCommands.setGroupColor,
+    onUngroup: groupCommands.ungroup,
   }), [
     editingId,
     exitTimelineFocus,
+    groupCommands.renameGroup,
+    groupCommands.setGroupColor,
+    groupCommands.toggleGroupCollapse,
+    groupCommands.toggleGroupLock,
+    groupCommands.ungroup,
     nodeCommands.addCustomHandle,
     nodeCommands.deleteCustomHandle,
     nodeCommands.deleteNode,
@@ -281,6 +442,7 @@ export default function FlowCanvas({
     presentation.selectedNodes.length,
     shortcuts,
     timelineFocusDisabledIds,
+    variables,
   ]);
 
   const viewportHandlers: ViewportHandlers = {
@@ -407,9 +569,9 @@ export default function FlowCanvas({
       >
         <NodeActionContext.Provider value={nodeActionContextValue}>
           <CanvasViewport
-            nodes={presentation.displayNodes}
-            edges={presentation.displayEdges}
-            onNodesChange={onNodesChange}
+            nodes={viewportNodes}
+            edges={groupedDisplay.edges}
+            onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             nodeTypes={CANVAS_NODE_TYPES}
             viewportHandlers={viewportHandlers}
@@ -421,6 +583,9 @@ export default function FlowCanvas({
           header={{
             onExportState,
             onImportState,
+            onImportMarkdown: handleImportMarkdown,
+            onExportMarkdown: () => requestExport('markdown'),
+            onExportCsv: () => requestExport('csv'),
             canUndo,
             canRedo,
             onUndo,
@@ -455,6 +620,10 @@ export default function FlowCanvas({
             state: contextMenu.contextMenu,
             selectedCount: presentation.selectedNodes.length,
             canPaste: !!clipboard.clipboard,
+            canGroup: presentation.selectedNodes.length >= 2,
+            hasGroupedSelection,
+            onCreateGroup: handleCreateGroup,
+            onUngroupSelection: handleUngroupSelection,
             onCopy: clipboard.copySelectedNodes,
             onPaste: () => clipboard.pasteNodes(),
             onDelete: nodeCommands.deleteSelectedNodes,
@@ -472,6 +641,16 @@ export default function FlowCanvas({
             saveError,
             shortcuts,
             mediaLibraryOpen: mediaLibrary.isOpen,
+            storyboardOpen: isStoryboardOpen,
+            variablesOpen: isVariablesOpen,
+            onToggleStoryboard: () => {
+              setIsStoryboardOpen((open) => !open);
+              setIsVariablesOpen(false);
+            },
+            onToggleVariables: () => {
+              setIsVariablesOpen((open) => !open);
+              setIsStoryboardOpen(false);
+            },
             onToggleMediaLibrary: () => {
               const nextState = !mediaLibrary.isOpen;
               mediaLibrary.setOpen(nextState);
@@ -516,8 +695,42 @@ export default function FlowCanvas({
             onConfirm: () => {
               setNodes([]);
               setEdges([]);
+              setGroups([]);
               setShowClearConfirmModal(false);
             },
+          }}
+          storyboard={{
+            isOpen: isStoryboardOpen,
+            nodes,
+            edges,
+            groups,
+            shotOrder,
+            onShotOrderChange: (order) => setShotOrder(order),
+            durationThreshold: shotDurationThreshold,
+            onDurationThresholdChange: (seconds) => setShotDurationThreshold(seconds),
+            onClose: () => setIsStoryboardOpen(false),
+          }}
+          variablesPanel={{
+            isOpen: isVariablesOpen,
+            nodes,
+            variables,
+            onVariablesChange: (next) => setVariables(next),
+            onApplyGlobalReplace: handleApplyGlobalReplace,
+            onClose: () => setIsVariablesOpen(false),
+          }}
+          unresolvedExport={{
+            kind: pendingExport,
+            unresolved: unresolvedVariables,
+            onOpenVariables: () => {
+              setPendingExport(null);
+              setIsVariablesOpen(true);
+              setIsStoryboardOpen(false);
+            },
+            onExportAnyway: () => {
+              if (pendingExport) runExport(pendingExport);
+              setPendingExport(null);
+            },
+            onClose: () => setPendingExport(null),
           }}
         />
       </div>

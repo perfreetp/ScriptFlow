@@ -1,4 +1,4 @@
-import { ImageNode, IdeaNode, TableNode, TextNode, TimelineNode } from './nodes';
+import { GroupCardNode, GroupFrameNode, ImageNode, IdeaNode, TableNode, TextNode, TimelineNode } from './nodes';
 
 export const CANVAS_MEDIA_ASSETS_KEY = 'canvas_media_assets';
 export const RELATION_TAGS_STORAGE_KEY = 'custom_relation_tags';
@@ -11,4 +11,6 @@ export const CANVAS_NODE_TYPES = {
   idea: IdeaNode,
   table: TableNode,
   timeline: TimelineNode,
+  groupCard: GroupCardNode,
+  groupFrame: GroupFrameNode,
 };

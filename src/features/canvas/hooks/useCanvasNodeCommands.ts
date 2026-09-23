@@ -11,6 +11,7 @@ interface UseCanvasNodeCommandsOptions {
   setNodes: Dispatch<SetStateAction<WorkspaceNode[]>>;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
   getCenteredNodePosition: (xOffset?: number, yOffset?: number) => { x: number; y: number };
+  lockedNodeIds?: Set<string>;
   pendingExtractedSlice: PendingExtractedSlice | null;
   onExtractedSlicePlaced: () => void;
   onAfterAddNode?: () => void;
@@ -39,6 +40,7 @@ export function useCanvasNodeCommands({
   setNodes,
   setEdges,
   getCenteredNodePosition,
+  lockedNodeIds,
   pendingExtractedSlice,
   onExtractedSlicePlaced,
   onAfterAddNode,
@@ -108,12 +110,15 @@ export function useCanvasNodeCommands({
   }, [setEdges, setNodes]);
 
   const deleteNode = useCallback((id: string) => {
+    if (lockedNodeIds?.has(id)) return;
     setNodes((currentNodes) => currentNodes.filter((node) => node.id !== id));
     setEdges((currentEdges) => currentEdges.filter((edge) => edge.source !== id && edge.target !== id));
-  }, [setEdges, setNodes]);
+  }, [lockedNodeIds, setEdges, setNodes]);
 
   const deleteSelectedNodes = useCallback(() => {
-    const selectedIds = new Set(selectedNodes.map((node) => node.id));
+    const selectedIds = new Set(
+      selectedNodes.map((node) => node.id).filter((id) => !lockedNodeIds?.has(id)),
+    );
     if (selectedIds.size === 0) return;
 
     setNodes((currentNodes) => currentNodes.filter((node) => !selectedIds.has(node.id)));
@@ -121,7 +126,7 @@ export function useCanvasNodeCommands({
       currentEdges.filter((edge) => !selectedIds.has(edge.source) && !selectedIds.has(edge.target)),
     );
     onAfterSelectionMutation?.();
-  }, [onAfterSelectionMutation, selectedNodes, setEdges, setNodes]);
+  }, [lockedNodeIds, onAfterSelectionMutation, selectedNodes, setEdges, setNodes]);
 
   const updateNodesFromPanel = useCallback((nodeIds: string[], patch: Partial<CanvasNodeData>) => {
     const nodeIdSet = new Set(nodeIds);

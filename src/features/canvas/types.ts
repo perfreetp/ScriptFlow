@@ -11,6 +11,7 @@ import type {
   AutoSaveStatus,
   CanvasMediaAsset,
   CanvasNodeData,
+  SceneGroup,
   WorkspaceNode,
   WorkspaceSaveState,
 } from '../../types';
@@ -42,6 +43,14 @@ export interface FlowCanvasProps {
   onEdgesChange: OnEdgesChange<Edge>;
   setNodes: Dispatch<SetStateAction<WorkspaceNode[]>>;
   setEdges: Dispatch<SetStateAction<Edge[]>>;
+  groups: SceneGroup[];
+  setGroups: Dispatch<SetStateAction<SceneGroup[]>>;
+  variables: Record<string, string>;
+  setVariables: Dispatch<SetStateAction<Record<string, string>>>;
+  shotOrder: string[];
+  setShotOrder: Dispatch<SetStateAction<string[]>>;
+  shotDurationThreshold: number;
+  setShotDurationThreshold: Dispatch<SetStateAction<number>>;
   onUpdateMainDocument: (newHtml: string) => void;
   onExportState: () => void;
   onImportState: (state: WorkspaceSaveState) => void;

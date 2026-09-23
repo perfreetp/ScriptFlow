@@ -95,6 +95,19 @@ export type CanvasNodeData =
 
 export type WorkspaceNode = Node<CanvasNodeData>;
 
+export interface SceneGroup {
+  id: string;
+  name: string;
+  color: string;
+  locked: boolean;
+  collapsed: boolean;
+  nodeIds: string[];
+  /** Top-left position of the collapsed summary card on the canvas. */
+  collapsedPosition: { x: number; y: number };
+  /** Member bounding-box origin captured when the group was collapsed. */
+  collapseOrigin: { x: number; y: number };
+}
+
 export interface CanvasMediaAsset {
   id: string;
   url: string;
@@ -108,4 +121,8 @@ export interface WorkspaceSaveState {
   mainDocumentHtml: string;
   nodes: Array<WorkspaceNode>;
   edges: Array<Edge>;
+  groups?: SceneGroup[];
+  variables?: Record<string, string>;
+  shotOrder?: string[];
+  shotDurationThreshold?: number;
 }
