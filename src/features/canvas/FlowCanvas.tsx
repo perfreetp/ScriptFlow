@@ -3,6 +3,20 @@ import { useReactFlow } from '@xyflow/react';
 import type { Edge } from '@xyflow/react';
 import { NodeActionContext } from './nodes';
 import { CANVAS_NODE_TYPES } from './constants';
+import {
+  ProductionContext,
+  ProductionPanel,
+  TeleprompterModal,
+  useProductionAssets,
+} from '../production';
+import type { TeleprompterShot } from '../production';
+import {
+  computeProductionAlerts,
+  computeProductionAnalytics,
+  isShotNode,
+  normalizeShotSlots,
+} from '../production/utils/productionUtils';
+import type { ShotSlotType, WorkspaceNode } from '../../types';
 import CanvasOverlays from './CanvasOverlays';
 import CanvasViewport from './CanvasViewport';
 import { useCanvasAssembly } from './hooks/useCanvasAssembly';
@@ -48,6 +62,9 @@ export default function FlowCanvas({
   const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const [isTemplatePanelOpen, setIsTemplatePanelOpen] = useState(false);
   const [timelineFocusDisabledIds, setTimelineFocusDisabledIds] = useState<Set<string>>(() => new Set());
+  const [isProductionPanelOpen, setIsProductionPanelOpen] = useState(false);
+  const [teleprompterSession, setTeleprompterSession] = useState<{ shots: TeleprompterShot[]; startNodeId: string | null } | null>(null);
+  const productionAssets = useProductionAssets();
 
   const pointerPan = useCanvasPointerPan();
   const edgeCommands = useCanvasEdgeCommands({ setEdges });
@@ -131,6 +148,75 @@ export default function FlowCanvas({
     getCenteredNodePosition,
   });
 
+  const bindAssetToSlot = useCallback((nodeId: string, slot: ShotSlotType, assetId: string) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        const shotSlots = normalizeShotSlots(node.data.shotSlots).map((binding) =>
+          binding.slot === slot ? { ...binding, assetId } : binding,
+        );
+        return { ...node, data: { ...node.data, shotSlots } } as WorkspaceNode;
+      }),
+    );
+  }, [setNodes]);
+
+  const unbindAssetFromSlot = useCallback((nodeId: string, slot: ShotSlotType) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        const shotSlots = normalizeShotSlots(node.data.shotSlots).map((binding) =>
+          binding.slot === slot ? { ...binding, assetId: null } : binding,
+        );
+        return { ...node, data: { ...node.data, shotSlots } } as WorkspaceNode;
+      }),
+    );
+  }, [setNodes]);
+
+  const unbindAssetEverywhere = useCallback((assetId: string) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) => {
+        if (!node.data.shotSlots?.some((binding) => binding.assetId === assetId)) return node;
+        const shotSlots = node.data.shotSlots.map((binding) =>
+          binding.assetId === assetId ? { ...binding, assetId: null } : binding,
+        );
+        return { ...node, data: { ...node.data, shotSlots } } as WorkspaceNode;
+      }),
+    );
+  }, [setNodes]);
+
+  const toggleShotDone = useCallback((nodeId: string, done: boolean) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) =>
+        node.id === nodeId ? ({ ...node, data: { ...node.data, shotDone: done } } as WorkspaceNode) : node,
+      ),
+    );
+  }, [setNodes]);
+
+  const recordShotActual = useCallback((nodeId: string, actualSec: number) => {
+    setNodes((currentNodes) =>
+      currentNodes.map((node) =>
+        node.id === nodeId ? ({ ...node, data: { ...node.data, shotActualSec: actualSec } } as WorkspaceNode) : node,
+      ),
+    );
+  }, [setNodes]);
+
+  const productionContextValue = useMemo(() => ({
+    assets: productionAssets.assets,
+    bindAsset: bindAssetToSlot,
+    unbindAsset: unbindAssetFromSlot,
+  }), [bindAssetToSlot, productionAssets.assets, unbindAssetFromSlot]);
+
+  const selectedShotNode = useMemo(
+    () => presentation.selectedNodes.find((node) => isShotNode(node)) ?? null,
+    [presentation.selectedNodes],
+  );
+
+  const productionAlertCount = useMemo(() => {
+    const alerts = computeProductionAlerts(nodes, productionAssets.assets);
+    const analytics = computeProductionAnalytics(nodes);
+    return alerts.overused.length + alerts.missingSlots.length + analytics.talkingHeadRuns.length;
+  }, [nodes, productionAssets.assets]);
+
   const addImageFilesToCanvas = useCallback((files: File[], clientX: number, clientY: number) => {
     const imageFiles = files.filter((file) => file.type.startsWith('image/'));
     if (imageFiles.length === 0) return;
@@ -163,6 +249,7 @@ export default function FlowCanvas({
       setIsDrawerOpen(false);
       mediaLibrary.setOpen(false);
       setIsTemplatePanelOpen(false);
+      setIsProductionPanelOpen(false);
     },
     onUndo,
     onRedo,
@@ -176,6 +263,7 @@ export default function FlowCanvas({
       setIsDrawerOpen(false);
       setIsMenuOpen(false);
       setIsTemplatePanelOpen(false);
+      setIsProductionPanelOpen(false);
     },
     onToggleMoreTools: () => {
       setIsDrawerOpen((open) => {
@@ -185,6 +273,7 @@ export default function FlowCanvas({
       });
       mediaLibrary.setOpen(false);
       setIsMenuOpen(false);
+      setIsProductionPanelOpen(false);
     },
     onCopySelection: clipboard.copySelectedNodes,
     onPasteSelection: () => clipboard.pasteNodes(),
@@ -406,16 +495,42 @@ export default function FlowCanvas({
         onContextMenu={viewportShellHandlers.onContextMenu}
       >
         <NodeActionContext.Provider value={nodeActionContextValue}>
-          <CanvasViewport
-            nodes={presentation.displayNodes}
-            edges={presentation.displayEdges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            nodeTypes={CANVAS_NODE_TYPES}
-            viewportHandlers={viewportHandlers}
-            isPanningByPointer={pointerPan.isPanningByPointer}
-          />
+          <ProductionContext.Provider value={productionContextValue}>
+            <CanvasViewport
+              nodes={presentation.displayNodes}
+              edges={presentation.displayEdges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              nodeTypes={CANVAS_NODE_TYPES}
+              viewportHandlers={viewportHandlers}
+              isPanningByPointer={pointerPan.isPanningByPointer}
+            />
+          </ProductionContext.Provider>
         </NodeActionContext.Provider>
+
+        {isProductionPanelOpen && (
+          <ProductionPanel
+            nodes={nodes}
+            assets={productionAssets.assets}
+            addAsset={productionAssets.addAsset}
+            deleteAsset={productionAssets.deleteAsset}
+            selectedShotNode={selectedShotNode}
+            onBindAsset={bindAssetToSlot}
+            onUnbindAssetEverywhere={unbindAssetEverywhere}
+            onToggleShotDone={toggleShotDone}
+            onOpenTeleprompter={(shots) => setTeleprompterSession({ shots, startNodeId: selectedShotNode?.id ?? null })}
+            onClose={() => setIsProductionPanelOpen(false)}
+          />
+        )}
+
+        {teleprompterSession && teleprompterSession.shots.length > 0 && (
+          <TeleprompterModal
+            shots={teleprompterSession.shots}
+            startNodeId={teleprompterSession.startNodeId}
+            onRecordActual={recordShotActual}
+            onClose={() => setTeleprompterSession(null)}
+          />
+        )}
 
         <CanvasOverlays
           header={{
@@ -432,6 +547,7 @@ export default function FlowCanvas({
                 setIsDrawerOpen(false);
                 mediaLibrary.setOpen(false);
                 setIsTemplatePanelOpen(false);
+                setIsProductionPanelOpen(false);
               }
             },
             onAutoLayout: nodeCommands.autoLayout,
@@ -478,6 +594,7 @@ export default function FlowCanvas({
               setIsDrawerOpen(false);
               setIsMenuOpen(false);
               setIsTemplatePanelOpen(false);
+              setIsProductionPanelOpen(false);
             },
             onToggleDrawer: () => {
               const nextState = !isDrawerOpen;
@@ -486,6 +603,7 @@ export default function FlowCanvas({
                 setIsMenuOpen(false);
                 mediaLibrary.setOpen(false);
                 setIsTemplatePanelOpen(false);
+                setIsProductionPanelOpen(false);
               }
             },
             onOpenTemplates: () => {
@@ -493,7 +611,17 @@ export default function FlowCanvas({
               setIsDrawerOpen(false);
               setIsMenuOpen(false);
               mediaLibrary.setOpen(false);
+              setIsProductionPanelOpen(false);
               edgeCommands.setSelectedEdge(null);
+            },
+            productionOpen: isProductionPanelOpen,
+            productionAlertCount,
+            onToggleProduction: () => {
+              setIsProductionPanelOpen((open) => !open);
+              setIsDrawerOpen(false);
+              setIsMenuOpen(false);
+              mediaLibrary.setOpen(false);
+              setIsTemplatePanelOpen(false);
             },
             onAddNode: nodeCommands.addNode,
           }}

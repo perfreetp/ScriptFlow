@@ -1,5 +1,6 @@
 import {
   Boxes,
+  Clapperboard,
   Eraser,
   Film,
   FolderOpen,
@@ -30,6 +31,9 @@ interface CanvasToolbarProps {
   onToggleMediaLibrary: () => void;
   onToggleDrawer: () => void;
   onOpenTemplates: () => void;
+  isProductionOpen: boolean;
+  productionAlertCount: number;
+  onToggleProduction: () => void;
   onAddNode: (type: NodeType) => void;
 }
 
@@ -44,6 +48,9 @@ export default function CanvasToolbar({
   onToggleMediaLibrary,
   onToggleDrawer,
   onOpenTemplates,
+  isProductionOpen,
+  productionAlertCount,
+  onToggleProduction,
   onAddNode,
 }: CanvasToolbarProps) {
   return (
@@ -80,6 +87,17 @@ export default function CanvasToolbar({
               {mediaAssetCount > 0 && (
                 <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-neutral-900 px-1 text-[9px] font-bold leading-none text-white">
                   {mediaAssetCount}
+                </span>
+              )}
+            </span>
+          </ToolbarIconButton>
+
+          <ToolbarIconButton title="拍摄制作" onClick={onToggleProduction} active={isProductionOpen}>
+            <span className="relative">
+              <Clapperboard className="h-4 w-4" />
+              {productionAlertCount > 0 && (
+                <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
+                  {productionAlertCount}
                 </span>
               )}
             </span>

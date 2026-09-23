@@ -7,6 +7,23 @@ import { Node, Edge } from '@xyflow/react';
 
 export type NodeType = 'text' | 'image' | 'idea' | 'table' | 'timeline';
 
+export type ShotSlotType = 'onCamera' | 'broll' | 'graphic' | 'audio' | 'subtitle';
+
+export interface ShotSlotBinding {
+  slot: ShotSlotType;
+  assetId: string | null;
+}
+
+export interface ShotAsset {
+  id: string;
+  name: string;
+  type: ShotSlotType;
+  durationSec: number;
+  tags: string[];
+  maxUsage: number;
+  createdAt: number;
+}
+
 export interface TableNodeDataValue {
   headers: string[];
   rows: string[][];
@@ -53,6 +70,10 @@ interface BaseCanvasNodeData extends Record<string, unknown> {
   imageUrl?: string;
   imageCaption?: string;
   customHandles?: CanvasNodeHandleData[];
+  shotSlots?: ShotSlotBinding[];
+  shotDone?: boolean;
+  shotActualSec?: number;
+  shotEstimateSec?: number;
   createdAt: number;
 }
 

@@ -101,6 +101,10 @@ export default function App() {
         tableCellAlignments: n.data.type === 'table' ? n.data.tableCellAlignments : undefined,
         activeTableCell: n.data.type === 'table' ? n.data.activeTableCell : undefined,
         timelineData: n.data.type === 'timeline' ? n.data.timelineData : undefined,
+        shotSlots: n.data.shotSlots,
+        shotDone: n.data.shotDone,
+        shotActualSec: n.data.shotActualSec,
+        shotEstimateSec: n.data.shotEstimateSec,
         createdAt: n.data.createdAt || Date.now(),
       },
     })) as WorkspaceNode[];

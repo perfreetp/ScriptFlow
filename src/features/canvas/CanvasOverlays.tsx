@@ -70,6 +70,9 @@ interface CanvasOverlaysProps {
     onToggleMediaLibrary: () => void;
     onToggleDrawer: () => void;
     onOpenTemplates: () => void;
+    productionOpen: boolean;
+    productionAlertCount: number;
+    onToggleProduction: () => void;
     onAddNode: (type: CanvasNodeData['type']) => void;
   };
   mediaLibrary: CanvasMediaLibraryState;
@@ -167,6 +170,9 @@ export default function CanvasOverlays({
         onToggleMediaLibrary={toolbar.onToggleMediaLibrary}
         onToggleDrawer={toolbar.onToggleDrawer}
         onOpenTemplates={toolbar.onOpenTemplates}
+        isProductionOpen={toolbar.productionOpen}
+        productionAlertCount={toolbar.productionAlertCount}
+        onToggleProduction={toolbar.onToggleProduction}
         onAddNode={toolbar.onAddNode}
       />
 

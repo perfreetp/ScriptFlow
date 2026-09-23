@@ -4,6 +4,7 @@ import { NodeActionContext } from './NodeActionContext';
 import CardResizeControls from './CardResizeControls';
 import StandardHandles from './StandardHandles';
 import { useDynamicHandleClick } from './useDynamicHandleClick';
+import ShotSlotsBar from '../../production/components/ShotSlotsBar';
 import type { TextCanvasNodeData } from '../../../types';
 
 const DEFAULT_TEXT_NODE_WIDTH = 280;
@@ -213,6 +214,8 @@ export const TextNode = memo(({ id, data, selected }: { id: string; data: TextCa
       </div>
 
       {/* Node Footer Meta */}
+      <ShotSlotsBar nodeId={id} slots={data.shotSlots} />
+
       <div className="flex shrink-0 justify-between items-center px-3.5 py-1.5 bg-neutral-50/20 border-t border-neutral-50 text-[10px] text-neutral-400 select-none rounded-b-lg">
           <span>{data.status || '文本切片'}</span>
         <span>ID: {id.slice(0, 6)}</span>
@@ -222,5 +225,4 @@ export const TextNode = memo(({ id, data, selected }: { id: string; data: TextCa
 });
 
 TextNode.displayName = 'TextNode';
-
 
